@@ -1,0 +1,19 @@
+server:
+  port: 8080
+
+spring:
+  config:
+    import: optional:file:./.env[.properties]   # lee el mismo .env que usa Docker
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:${DB_PORT}/${DB_NAME}?useUnicode=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Guayaquil
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        '[format_sql]': true
+  cloud:
+    vault:
+      enabled: false             # solo aplica si agregaste Vault; se activa en la Etapa 5

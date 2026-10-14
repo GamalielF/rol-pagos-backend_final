@@ -1,0 +1,19 @@
+server:
+  servlet:
+    context-path: /api/v1/roles-pago
+
+spring:
+  application:
+    name: rol-pagos-backend      # Vault lo usará como contexto de secretos
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate         # Hibernate nunca modifica el esquema
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+  flyway:
+    enabled: true
+    table: FLYWAY_SCHEMA_HISTORY
+    locations: classpath:db/migration
