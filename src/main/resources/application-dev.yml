@@ -3,7 +3,7 @@ server:
 
 spring:
   config:
-    import: optional:file:./.env[.properties]   # lee el mismo .env que usa Docker
+    import: optional:file:./.env[.properties]
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:${DB_PORT}/${DB_NAME}?useUnicode=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Guayaquil
@@ -16,4 +16,8 @@ spring:
         '[format_sql]': true
   cloud:
     vault:
-      enabled: false             # solo aplica si agregaste Vault; se activa en la Etapa 5
+      enabled: false
+
+app:
+  seguridad:
+    dev-auth-habilitado: true

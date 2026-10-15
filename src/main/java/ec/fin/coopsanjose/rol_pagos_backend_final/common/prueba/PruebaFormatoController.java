@@ -4,12 +4,15 @@ import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.ConflictoExce
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.OperacionNoPermitidaException;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.RecursoNoEncontradoException;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.response.ApiResponse;
+import ec.fin.coopsanjose.rol_pagos_backend_final.common.seguridad.UsuarioAutenticado;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.context.annotation.Profile;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -70,5 +73,18 @@ public class PruebaFormatoController {
     @PostMapping("/validar")
     public ApiResponse<SolicitudPrueba> validar(@Valid @RequestBody SolicitudPrueba solicitud) {
         return ApiResponse.ok("Solicitud valida", solicitud);
+    }
+
+    /** Devuelve la identidad que el sistema armó para la petición. */
+    @GetMapping("/yo")
+    public ApiResponse<UsuarioAutenticado> yo(@AuthenticationPrincipal UsuarioAutenticado usuario) {
+        return ApiResponse.ok("Usuario de la sesión", usuario);
+    }
+
+    /** Regla por método: prueba que un 403 dentro del controlador también sale en ApiResponse. */
+    @GetMapping("/solo-admin")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<String> soloAdmin() {
+        return ApiResponse.ok("Acceso de administrador concedido", "ok");
     }
 }

@@ -1,5 +1,6 @@
 package ec.fin.coopsanjose.rol_pagos_backend_final.common.exception;
-
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.response.ApiResponse;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.validation.ConstraintViolationException;
@@ -130,6 +131,20 @@ public class GlobalExceptionHandler {
         // El detalle (SQL, nombre de restricción) solo va al log, nunca al cliente
         log.warn("Integridad de datos violada: {}", ex.getMostSpecificCause().getMessage());
         return responder(HttpStatus.CONFLICT, "La operación viola una restricción de integridad de datos", null);
+    }
+    // ---------- Seguridad dentro de los controladores (401, 403) ----------
+
+    /** Reglas por método (@PreAuthorize). Toda ruta exige sesión, así que aquí siempre hay usuario: 403. */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> alDenegarAcceso(AccessDeniedException ex) {
+        log.warn("Acceso denegado: {}", ex.getMessage());
+        return responder(HttpStatus.FORBIDDEN, "No tiene permisos para realizar esta operación", null);
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiResponse<Void>> alFaltarAutenticacion(AuthenticationException ex) {
+        log.warn("Autenticación requerida: {}", ex.getClass().getSimpleName());
+        return responder(HttpStatus.UNAUTHORIZED, "Debe autenticarse para acceder a este recurso", null);
     }
 
     // ---------- Red de seguridad ----------
