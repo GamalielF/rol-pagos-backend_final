@@ -9,13 +9,17 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class DevAuthFilterTest {
 
-    private final DevAuthFilter filtro = new DevAuthFilter();
+    private final Map<String, PerfilDirectorio> directorio = new HashMap<>();
+    private final DevAuthFilter filtro = new DevAuthFilter(username -> Optional.ofNullable(directorio.get(username)));
 
     @AfterEach
     void limpiarSesion() {
@@ -27,46 +31,73 @@ class DevAuthFilterTest {
         return SecurityContextHolder.getContext().getAuthentication();
     }
 
+    private MockHttpServletRequest como(String usuario, String roles) {
+        MockHttpServletRequest peticion = new MockHttpServletRequest();
+        peticion.addHeader(DevAuthFilter.CABECERA_USUARIO, usuario);
+        if (roles != null) {
+            peticion.addHeader(DevAuthFilter.CABECERA_ROLES, roles);
+        }
+        return peticion;
+    }
+
+    private PerfilDirectorio perfil(boolean activo) {
+        return new PerfilDirectorio("jperez", "1712345675", "PEREZ LOPEZ JUAN", "jperez@coopsanjose.fin.ec", activo);
+    }
+
     @Test
     void sinCabeceraNoAutentica() throws Exception {
         assertThat(ejecutar(new MockHttpServletRequest())).isNull();
     }
 
     @Test
-    void conUsuarioYRolesArmaLaSesion() throws Exception {
-        MockHttpServletRequest peticion = new MockHttpServletRequest();
-        peticion.addHeader(DevAuthFilter.CABECERA_USUARIO, "fsepa");
-        peticion.addHeader(DevAuthFilter.CABECERA_ROLES, "rrhh, empleado");
-        peticion.addHeader(DevAuthFilter.CABECERA_CEDULA, "0202125712");
+    void laCedulaYElNombreSalenDelDirectorioNuncaDeLaPeticion() throws Exception {
+        directorio.put("jperez", perfil(true));
+        MockHttpServletRequest peticion = como("jperez", "rrhh, empleado");
+        peticion.addHeader("X-Dev-Cedula", "1709876542");   // intento de suplantación: se ignora
 
         Authentication auth = ejecutar(peticion);
 
-        assertThat(auth).isNotNull();
-        assertThat(auth.isAuthenticated()).isTrue();
         UsuarioAutenticado usuario = (UsuarioAutenticado) auth.getPrincipal();
-        assertThat(usuario.username()).isEqualTo("fsepa");
-        assertThat(usuario.cedula()).isEqualTo("0202125712");
+        assertThat(usuario.cedula()).isEqualTo("1712345675");
+        assertThat(usuario.nombre()).isEqualTo("PEREZ LOPEZ JUAN");
         List<String> autoridades = auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
         assertThat(autoridades).containsExactlyInAnyOrder("ROLE_RRHH", "ROLE_EMPLEADO");
     }
 
     @Test
-    void sinRolesAsumeEmpleado() throws Exception {
-        MockHttpServletRequest peticion = new MockHttpServletRequest();
-        peticion.addHeader(DevAuthFilter.CABECERA_USUARIO, "jperez");
+    void unUsuarioInactivoEnElAdNoSeAutentica() throws Exception {
+        directorio.put("jperez", perfil(false));
 
-        UsuarioAutenticado usuario = (UsuarioAutenticado) ejecutar(peticion).getPrincipal();
+        assertThat(ejecutar(como("jperez", "EMPLEADO"))).isNull();
+    }
+
+    @Test
+    void unUsuarioDesconocidoSeAutenticaSinCedula() throws Exception {
+        UsuarioAutenticado usuario = (UsuarioAutenticado) ejecutar(como("nuevo", "EMPLEADO")).getPrincipal();
+
+        assertThat(usuario.username()).isEqualTo("nuevo");
+        assertThat(usuario.cedula()).isNull();
+    }
+
+    @Test
+    void usaElCodigoDeUsuarioCanonicoDelDirectorio() throws Exception {
+        directorio.put("JPEREZ", perfil(true));
+
+        UsuarioAutenticado usuario = (UsuarioAutenticado) ejecutar(como("JPEREZ", "EMPLEADO")).getPrincipal();
+
+        assertThat(usuario.username()).isEqualTo("jperez");
+    }
+
+    @Test
+    void sinRolesAsumeEmpleado() throws Exception {
+        UsuarioAutenticado usuario = (UsuarioAutenticado) ejecutar(como("jperez", null)).getPrincipal();
 
         assertThat(usuario.roles()).containsExactly(Rol.EMPLEADO);
     }
 
     @Test
-    void rolDesconocidoSeIgnoraYNuncaEscalaPrivilegios() throws Exception {
-        MockHttpServletRequest peticion = new MockHttpServletRequest();
-        peticion.addHeader(DevAuthFilter.CABECERA_USUARIO, "jperez");
-        peticion.addHeader(DevAuthFilter.CABECERA_ROLES, "SUPERADMIN");
-
-        UsuarioAutenticado usuario = (UsuarioAutenticado) ejecutar(peticion).getPrincipal();
+    void rolDesconocidoNuncaEscalaPrivilegios() throws Exception {
+        UsuarioAutenticado usuario = (UsuarioAutenticado) ejecutar(como("jperez", "SUPERADMIN")).getPrincipal();
 
         assertThat(usuario.tieneRol(Rol.ADMIN)).isFalse();
         assertThat(usuario.roles()).containsExactly(Rol.EMPLEADO);
