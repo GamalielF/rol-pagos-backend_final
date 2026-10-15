@@ -1,4 +1,4 @@
-package ec.fin.coopsanjose.rol_pagos_backend_final.config;
+package ec.fin.coopsanjose.rol_pagos_backend_final.common.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

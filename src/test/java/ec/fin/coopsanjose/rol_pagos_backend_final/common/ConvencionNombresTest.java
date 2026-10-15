@@ -1,5 +1,6 @@
-package ec.fin.coopsanjose.rol_pagos_backend_final.common.rolpagos;
+package ec.fin.coopsanjose.rol_pagos_backend_final.common;
 
+import ec.fin.coopsanjose.rol_pagos_backend_final.RolPagosBackendFinalApplication;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.JoinColumn;
@@ -24,13 +25,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ConvencionNombresTest {
 
-    private static final String PAQUETE_BASE = "ec.fin.coopsanjose.rolpagos";
+    // Se toma de la clase principal: así nunca se desajusta con el paquete real
+    private static final String PAQUETE_BASE = RolPagosBackendFinalApplication.class.getPackageName();
     private static final Pattern MAYUSCULAS = Pattern.compile("^[A-Z][A-Z0-9_]*$");
 
     @Test
     void tablasYColumnasEstanEnMayusculas() throws ClassNotFoundException {
         List<Class<?>> entidades = buscarEntidades();
-        assertThat(entidades).as("No se encontró ninguna @Entity: revise PAQUETE_BASE").isNotEmpty();
+        assertThat(entidades).as("No se encontró ninguna @Entity bajo " + PAQUETE_BASE).isNotEmpty();
 
         List<String> errores = new ArrayList<>();
         for (Class<?> entidad : entidades) {
@@ -64,6 +66,7 @@ class ConvencionNombresTest {
     private String revisar(Field campo) {
         int mod = campo.getModifiers();
         if (Modifier.isStatic(mod) || Modifier.isTransient(mod)
+                || campo.isSynthetic()   // campos que inyectan herramientas como la cobertura de IntelliJ
                 || campo.isAnnotationPresent(Transient.class)
                 || campo.isAnnotationPresent(OneToMany.class)
                 || campo.isAnnotationPresent(ManyToMany.class)) {
