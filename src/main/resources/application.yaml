@@ -11,13 +11,18 @@ server:
 
 spring:
   application:
-    name: rol-pagos-backend      # Vault lo usará como contexto de secretos
+    name: rol-pagos-backend
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
+  config:
+    import:
+      # Solo existen en tu equipo (están en .gitignore). "optional:" evita el error en producción
+      - optional:file:./.env[.properties]
+      - optional:file:./docker/runtime/vault-approle.properties
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: validate         # Hibernate nunca modifica el esquema
+      ddl-auto: validate
       naming:
         physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
   flyway:

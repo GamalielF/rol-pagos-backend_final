@@ -40,7 +40,8 @@ build/
 *.jks
 *.pem
 *.key
-
+VAULT_DEV_ROOT_TOKEN=
+VAULT_PORT=8200
 # Secretos y entorno: NUNCA al repositorio
 .env
 .env.*
