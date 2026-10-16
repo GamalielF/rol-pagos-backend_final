@@ -54,3 +54,5 @@ VAULT_PORT=8200
 
 # Credenciales generadas por el script de Vault (nunca al repositorio)
 docker/runtime/
+
+data/

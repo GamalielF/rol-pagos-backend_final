@@ -1,6 +1,8 @@
 server:
   servlet:
     context-path: /api/v1/roles-pago
+  tomcat:
+    max-part-count: 600          # archivos por carga masiva (por defecto Tomcat permite 50)
   error:
     include-message: never
     include-stacktrace: never
@@ -19,6 +21,10 @@ spring:
       # Solo existen en tu equipo (están en .gitignore). "optional:" evita el error en producción
       - optional:file:./.env[.properties]
       - optional:file:./docker/runtime/vault-approle.properties
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 100MB
   jpa:
     open-in-view: false
     hibernate:
@@ -42,6 +48,11 @@ app:
       - publicaciones
       - auditor_sbs
     sincronizacion:
-      habilitada: false                # la programación nocturna llega en la Parte 2
+      habilitada: false
       cron: "0 0 3 * * *"
       porcentaje-minimo: 50            # protección contra respuestas parciales del AD
+  roles:
+    ruta-base: ${ROLES_RUTA_BASE:./data/roles-pago}   # en producción lo define TI
+    tamano-maximo-archivo: 5MB
+    max-archivos-por-carga: 500
+    max-paginas: 1
