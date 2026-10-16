@@ -22,7 +22,8 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
-
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -145,6 +146,19 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> alFaltarAutenticacion(AuthenticationException ex) {
         log.warn("Autenticación requerida: {}", ex.getClass().getSimpleName());
         return responder(HttpStatus.UNAUTHORIZED, "Debe autenticarse para acceder a este recurso", null);
+    }
+
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> alExcederElTamanoDeCarga(MaxUploadSizeExceededException ex) {
+        log.warn("Carga demasiado grande");
+        return responder(HttpStatus.PAYLOAD_TOO_LARGE, "La carga supera el tamaño máximo permitido", null);
+    }
+
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<ApiResponse<Void>> alFallarLaCargaDeArchivos(MultipartException ex) {
+        log.warn("Carga de archivos inválida ({})", ex.getClass().getSimpleName());
+        return responder(HttpStatus.BAD_REQUEST, "No se pudo procesar la carga de archivos", null);
     }
 
     // ---------- Red de seguridad ----------

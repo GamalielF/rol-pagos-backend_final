@@ -17,14 +17,14 @@ import lombok.Setter;
 import java.time.LocalDate;
 
 /**
- * El rol de pago (PDF) de un titular en un período. El DUEÑO es el código de usuario; la cédula es solo
- * referencia. ESTADO_REGISTRO INACTIVO = retirado por RRHH (nunca se borra).
+ * El rol de pago (PDF) de una PERSONA en un período: la clave es (período, cédula).
+ * ESTADO_REGISTRO INACTIVO = retirado por RRHH (nunca se borra).
  */
 @Entity
 @Table(name = "ROLES_PAGO",
-        uniqueConstraints = @UniqueConstraint(name = "UK_ROLES_PAGO_PERIODO_USUARIO",
-                columnNames = {"PERIODO_ID", "USERNAME_AD"}),
-        indexes = @Index(name = "IDX_ROLES_PAGO_USERNAME", columnList = "USERNAME_AD"))
+        uniqueConstraints = @UniqueConstraint(name = "UK_ROLES_PAGO_PERIODO_CEDULA",
+                columnNames = {"PERIODO_ID", "CEDULA"}),
+        indexes = @Index(name = "IDX_ROLES_PAGO_CEDULA", columnList = "CEDULA"))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -33,9 +33,6 @@ public class RolPago extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "PERIODO_ID", nullable = false)
     private Periodo periodo;
-
-    @Column(name = "USERNAME_AD", nullable = false, length = 50)
-    private String usernameAd;
 
     @Column(name = "CEDULA", nullable = false, length = 10)
     private String cedula;
