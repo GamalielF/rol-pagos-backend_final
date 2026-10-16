@@ -1,6 +1,7 @@
 package ec.fin.coopsanjose.rol_pagos_backend_final.common.config;
 import lombok.extern.slf4j.Slf4j;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.seguridad.DevAuthFilter;
+import ec.fin.coopsanjose.rol_pagos_backend_final.common.seguridad.DirectorioUsuarios;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.seguridad.SeguridadRespuestaHandler;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -27,6 +28,7 @@ public class SecurityConfig {
     public SecurityFilterChain cadenaDeSeguridad(HttpSecurity http,
                                                  SeguridadRespuestaHandler respuestas,
                                                  Environment entorno,
+                                                 DirectorioUsuarios directorio,
                                                  @Value("${app.seguridad.dev-auth-habilitado:false}") boolean devAuth)
             throws Exception {
 
@@ -51,7 +53,7 @@ public class SecurityConfig {
 
         if (devAuth) {
             log.warn("AUTENTICACION DE DESARROLLO ACTIVA: se acepta la identidad enviada en las cabeceras X-Dev-*");
-            http.addFilterBefore(new DevAuthFilter(), UsernamePasswordAuthenticationFilter.class);
+            http.addFilterBefore(new DevAuthFilter(directorio), UsernamePasswordAuthenticationFilter.class);
         } else {
             log.info("Autenticacion de desarrollo desactivada");
         }

@@ -5,6 +5,13 @@ spring:
   config:
     import:
       - vault://secret/rol-pagos-backend/db
+      - vault://secret/rol-pagos-backend/ad
+  ssl:
+    bundle:
+      pem:
+        ad:
+          truststore:
+            certificate: file:./certs/ca-ad.crt   # CA del AD (solo certificados públicos)
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:${DB_PORT}/${DB_NAME}?useUnicode=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Guayaquil
@@ -23,8 +30,10 @@ spring:
       kv:
         enabled: true
         backend: secret
-      fail-fast: true      # sin Vault la aplicación no arranca, con un mensaje claro
+      fail-fast: true
 
 app:
   seguridad:
     dev-auth-habilitado: true
+  ad:
+    ssl-bundle: ad

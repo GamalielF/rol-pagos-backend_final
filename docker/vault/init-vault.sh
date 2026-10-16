@@ -50,6 +50,13 @@ vault write "auth/approle/role/${APP}" \
 # 4) Secretos (semilla tomada del .env)
 vault kv put "${MOUNT}/${APP}/db" "db.username=${DB_USER}" "db.password=${DB_PASSWORD}" >/dev/null
 
+# Datos del AD (la URL interna y el token NUNCA van al repositorio)
+[ -n "${AD_URL_BASE:-}" ] || { echo "[vault-init] ERROR: AD_URL_BASE es obligatorio"; exit 1; }
+if [ -n "${AD_TOKEN:-}" ]; then
+  vault kv put "${MOUNT}/${APP}/ad" "ad.url-base=${AD_URL_BASE}" "ad.token=${AD_TOKEN}" >/dev/null
+else
+  vault kv put "${MOUNT}/${APP}/ad" "ad.url-base=${AD_URL_BASE}" >/dev/null
+fi
 # 5) Credenciales de la aplicación, entregadas como archivo de propiedades de Spring
 ROLE_ID=$(vault read -field=role_id "auth/approle/role/${APP}/role-id")
 SECRET_ID=$(vault write -f -field=secret_id "auth/approle/role/${APP}/secret-id")

@@ -14,6 +14,10 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.security.cert.CertPathBuilderException;
+import java.security.cert.CertPathValidatorException;
+import java.security.cert.CertificateExpiredException;
+
 import javax.net.ssl.SSLException;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
@@ -108,7 +112,7 @@ public class DirectorioAdClient {
 
     private static String mensajeParaFalloDeRed(Throwable error) {
         if (tiene(error, SSLException.class)) {
-            return "No se pudo establecer una conexión segura con el AD (certificado no confiable)";
+            return mensajeParaFalloSsl(error);
         }
         if (tiene(error, HttpTimeoutException.class, SocketTimeoutException.class)) {
             return "El AD no respondió a tiempo";
@@ -117,6 +121,35 @@ public class DirectorioAdClient {
             return "No se pudo conectar con el AD";
         }
         return "Error de comunicación con el AD";
+    }
+
+    /** Distingue las tres causas habituales de un fallo TLS, sin exponer detalles internos. */
+    private static String mensajeParaFalloSsl(Throwable error) {
+        if (tiene(error, CertificateExpiredException.class)) {
+            return "El certificado del AD está vencido";
+        }
+        if (tieneMensaje(error, "No subject alternative", "No name matching", "subject alternative names")) {
+            return "El nombre del servidor del AD no coincide con su certificado";
+        }
+        if (tiene(error, CertPathBuilderException.class, CertPathValidatorException.class)
+                || tieneMensaje(error, "PKIX path", "unable to find valid certification path")) {
+            return "El certificado del AD no es confiable: su CA no está en el almacén de confianza";
+        }
+        return "No se pudo establecer una conexión segura con el AD";
+    }
+
+    private static boolean tieneMensaje(Throwable raiz, String... fragmentos) {
+        for (Throwable t = raiz; t != null; t = t.getCause()) {
+            String mensaje = t.getMessage();
+            if (mensaje != null) {
+                for (String fragmento : fragmentos) {
+                    if (mensaje.contains(fragmento)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private static boolean tiene(Throwable raiz, Class<?>... tipos) {

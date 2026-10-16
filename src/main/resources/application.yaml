@@ -29,3 +29,19 @@ spring:
     enabled: true
     table: FLYWAY_SCHEMA_HISTORY
     locations: classpath:db/migration
+
+app:
+  ad:
+    url-base: ${ad.url-base:}          # llega desde Vault
+    token: ${ad.token:}                # llega desde Vault (puede estar vacío)
+    dominio-correo: coopsanjose.fin.ec
+    timeout-conexion: 5s
+    timeout-lectura: 30s
+    cuentas-excluidas:                 # cuentas genéricas que no son una persona
+      - admin
+      - publicaciones
+      - auditor_sbs
+    sincronizacion:
+      habilitada: false                # la programación nocturna llega en la Parte 2
+      cron: "0 0 3 * * *"
+      porcentaje-minimo: 50            # protección contra respuestas parciales del AD

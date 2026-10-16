@@ -14,37 +14,49 @@ import java.io.IOException;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 
 /**
- * SOLO DESARROLLO. Identifica al usuario por cabeceras X-Dev-* mientras no existe el login real.
+ * SOLO DESARROLLO. Identifica al usuario por X-Dev-Usuario y X-Dev-Roles mientras no exista el login real.
  * SecurityConfig lo registra únicamente si app.seguridad.dev-auth-habilitado=true (perfil dev).
- * ETAPA 7: la cédula dejará de venir de la cabecera y saldrá del directorio del AD.
  */
 @Slf4j
 public class DevAuthFilter extends OncePerRequestFilter {
 
     public static final String CABECERA_USUARIO = "X-Dev-Usuario";
     public static final String CABECERA_ROLES = "X-Dev-Roles";
-    public static final String CABECERA_CEDULA = "X-Dev-Cedula";
-    public static final String CABECERA_NOMBRE = "X-Dev-Nombre";
+
+    private final DirectorioUsuarios directorio;
+
+    public DevAuthFilter(DirectorioUsuarios directorio) {
+        this.directorio = directorio;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
-        String username = limpiar(request.getHeader(CABECERA_USUARIO));
+        String solicitado = limpiar(request.getHeader(CABECERA_USUARIO));
 
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            Set<Rol> roles = leerRoles(request.getHeader(CABECERA_ROLES));
-            UsuarioAutenticado usuario = new UsuarioAutenticado(username,
-                    limpiar(request.getHeader(CABECERA_CEDULA)),
-                    limpiar(request.getHeader(CABECERA_NOMBRE)),
-                    roles);
-            List<SimpleGrantedAuthority> autoridades = roles.stream()
-                    .map(rol -> new SimpleGrantedAuthority(rol.autoridad()))
-                    .toList();
-            SecurityContextHolder.getContext().setAuthentication(
-                    new UsernamePasswordAuthenticationToken(usuario, null, autoridades));
+        if (solicitado != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            Optional<PerfilDirectorio> perfil = directorio.buscarPorUsername(solicitado);
+
+            if (perfil.isPresent() && !perfil.get().activo()) {
+                // Deshabilitado en el AD: sin sesión (la petición sigue anónima y recibe 401)
+                log.warn("Usuario inactivo en el directorio: se rechaza la sesión de desarrollo");
+            } else {
+                Set<Rol> roles = leerRoles(request.getHeader(CABECERA_ROLES));
+                UsuarioAutenticado usuario = new UsuarioAutenticado(
+                        perfil.map(PerfilDirectorio::username).orElse(solicitado),
+                        perfil.map(PerfilDirectorio::cedula).orElse(null),
+                        perfil.map(PerfilDirectorio::nombre).orElse(null),
+                        roles);
+                List<SimpleGrantedAuthority> autoridades = roles.stream()
+                        .map(rol -> new SimpleGrantedAuthority(rol.autoridad()))
+                        .toList();
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(usuario, null, autoridades));
+            }
         }
         chain.doFilter(request, response);
     }

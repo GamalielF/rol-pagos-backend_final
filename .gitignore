@@ -51,3 +51,6 @@ VAULT_PORT=8200
 *.jks
 *.pem
 *.key
+
+# Credenciales generadas por el script de Vault (nunca al repositorio)
+docker/runtime/

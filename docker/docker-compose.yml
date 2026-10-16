@@ -56,6 +56,8 @@ services:
       VAULT_TOKEN: ${VAULT_DEV_ROOT_TOKEN:?Defina VAULT_DEV_ROOT_TOKEN en .env}
       DB_USER: ${DB_USER:?Defina DB_USER en .env}
       DB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD en .env}
+      AD_URL_BASE: ${AD_URL_BASE:?Defina AD_URL_BASE en .env}
+      AD_TOKEN: ${AD_TOKEN:-}
     volumes:
       - ./vault/init-vault.sh:/init-vault.sh:ro
       - ./runtime:/runtime
