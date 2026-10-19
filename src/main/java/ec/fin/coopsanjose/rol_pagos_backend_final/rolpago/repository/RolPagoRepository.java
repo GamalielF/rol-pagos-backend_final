@@ -14,5 +14,5 @@ public interface RolPagoRepository extends BaseRepository<RolPago> {
     Optional<RolPago> findByPeriodo_IdAndCedula(Long idPeriodo, String cedula);
 
     List<RolPago> findByPeriodo_IdOrderByCedulaAsc(Long idPeriodo);
-    List<DirectorioAd> findByCedulaIn(Collection<String> cedulas);
+
 }
