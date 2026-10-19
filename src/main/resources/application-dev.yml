@@ -37,3 +37,11 @@ app:
     dev-auth-habilitado: true
   ad:
     ssl-bundle: ad
+  cors:
+    origenes-permitidos:
+      - http://localhost:4200
+    cabeceras-permitidas:
+      - Authorization
+      - Content-Type
+      - X-Dev-Usuario      # solo desarrollo: identidad simulada
+      - X-Dev-Roles        # solo desarrollo
