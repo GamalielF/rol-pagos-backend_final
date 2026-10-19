@@ -1,5 +1,6 @@
 package ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.service;
 
+import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.service.AuditoriaAccionesService;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.SolicitudInvalidaException;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.PeriodoRepository;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.config.RolPagoProperties;
@@ -26,7 +27,7 @@ class CargaRolesPagoServiceLimitesTest {
         RolPagoProperties propiedades = new RolPagoProperties("./data/no-se-usa", DataSize.ofMegabytes(5), maximoArchivos, 1);
         return new CargaRolesPagoService(mock(RolPagoRepository.class), mock(PeriodoRepository.class),
                 mock(ResolutorTitular.class), new LectorPdfRolPago(), mock(AlmacenRolesPago.class),
-                propiedades, mock(PlatformTransactionManager.class));
+                propiedades, mock(PlatformTransactionManager.class), mock(AuditoriaAccionesService.class));
     }
 
     private static MockMultipartFile archivo(String nombre) {

@@ -1,5 +1,7 @@
 package ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.service;
 
+import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.entity.TipoAccion;
+import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.service.AuditoriaAccionesService;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.entity.EstadoRegistro;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.ConflictoException;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.RecursoNoEncontradoException;
@@ -36,6 +38,7 @@ public class PublicacionService {
     private final PeriodoRepository periodoRepository;
     private final RolPagoRepository rolPagoRepository;
     private final DirectorioAdRepository directorioRepository;
+    private final AuditoriaAccionesService auditoria;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -62,6 +65,10 @@ public class PublicacionService {
         periodo.setFechaPublicacion(LocalDateTime.now(clock));
         periodo.setPublicadoPor(publicadoPor);
         periodoRepository.save(periodo);
+        auditoria.registrar(TipoAccion.PERIODO_PUBLICADO, ym.toString(), null,
+                "roles=" + resumen.rolesActivos() + ", sinRol=" + resumen.sinRol()
+                        + (confirmarFaltantes ? ", faltantes confirmados" : ""));
+
 
         log.info("Período {} publicado por {}: {} roles, {} personas sin rol",
                 ym, publicadoPor, resumen.rolesActivos(), resumen.sinRol());

@@ -23,6 +23,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
+import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.entity.TipoAccion;
+import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.service.AuditoriaAccionesService;
 
 import java.io.IOException;
 import java.security.MessageDigest;
@@ -51,6 +53,7 @@ public class CargaRolesPagoService {
     private final AlmacenRolesPago almacen;
     private final RolPagoProperties propiedades;
     private final TransactionTemplate transaccion;
+    private final AuditoriaAccionesService auditoria;
 
     public CargaRolesPagoService(RolPagoRepository rolPagoRepository,
                                  PeriodoRepository periodoRepository,
@@ -58,7 +61,8 @@ public class CargaRolesPagoService {
                                  LectorPdfRolPago lector,
                                  AlmacenRolesPago almacen,
                                  RolPagoProperties propiedades,
-                                 PlatformTransactionManager transactionManager) {
+                                 PlatformTransactionManager transactionManager,
+                                 AuditoriaAccionesService auditoria) {
         this.rolPagoRepository = rolPagoRepository;
         this.periodoRepository = periodoRepository;
         this.resolutor = resolutor;
@@ -66,6 +70,7 @@ public class CargaRolesPagoService {
         this.almacen = almacen;
         this.propiedades = propiedades;
         this.transaccion = new TransactionTemplate(transactionManager);
+        this.auditoria = auditoria;
     }
 
     public ResultadoCargaDto cargar(YearMonth ym, List<MultipartFile> archivos) {
@@ -90,6 +95,9 @@ public class CargaRolesPagoService {
         int rechazados = contar(resultados, EstadoCarga.RECHAZADO);
         log.info("Carga del período {}: {} cargados, {} reemplazados, {} sin cambios, {} rechazados",
                 ym, cargados, reemplazados, sinCambios, rechazados);
+        auditoria.registrar(TipoAccion.CARGA_LOTE, ym.toString(), null,
+                "archivos=" + resultados.size() + ", cargados=" + cargados + ", reemplazados=" + reemplazados
+                        + ", sinCambios=" + sinCambios + ", rechazados=" + rechazados);
         return new ResultadoCargaDto(ym.toString(), resultados.size(), cargados, reemplazados, sinCambios,
                 rechazados, resultados);
     }
@@ -168,7 +176,9 @@ public class CargaRolesPagoService {
         Optional<RolPago> existente = rolPagoRepository.findByPeriodo_IdAndCedula(idPeriodo, cedula);
         if (existente.isPresent()) {
             RolPago rol = existente.get();
-            if (rol.getEstadoRegistro() == EstadoRegistro.ACTIVO && hash.equals(rol.getHashSha256())) {
+            boolean estabaInactivo = rol.getEstadoRegistro() == EstadoRegistro.INACTIVO;
+            String hashAnterior = rol.getHashSha256();
+            if (!estabaInactivo && hash.equals(hashAnterior)) {
                 return EstadoCarga.SIN_CAMBIOS;
             }
             rol.setRutaArchivo(almacen.guardar(ym, pdf));
@@ -176,7 +186,14 @@ public class CargaRolesPagoService {
             rol.setTamanoBytes(pdf.length);
             rol.setMesPdf(ym.atDay(1));
             rol.activar();
-            rolPagoRepository.save(rol);
+            RolPago guardado = rolPagoRepository.save(rol);
+            if (estabaInactivo && hash.equals(hashAnterior)) {
+                auditoria.registrar(TipoAccion.ROL_ACTIVADO, ym.toString(), guardado.getId(),
+                        "Reactivado al volver a cargar el mismo archivo");
+            } else {
+                auditoria.registrar(TipoAccion.ROL_REEMPLAZADO, ym.toString(), guardado.getId(),
+                        "Contenido reemplazado (huella " + corta(hashAnterior) + " -> " + corta(hash) + ")");
+            }
             return EstadoCarga.REEMPLAZADO;
         }
         RolPago nuevo = new RolPago();
@@ -188,6 +205,10 @@ public class CargaRolesPagoService {
         nuevo.setMesPdf(ym.atDay(1));
         rolPagoRepository.save(nuevo);
         return EstadoCarga.CARGADO;
+    }
+
+    private static String corta(String hash) {
+        return hash == null ? "-" : hash.substring(0, Math.min(8, hash.length()));
     }
 
     // ------------------------------------------------------------ utilidades

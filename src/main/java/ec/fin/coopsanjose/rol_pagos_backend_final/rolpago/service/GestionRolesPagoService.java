@@ -1,5 +1,7 @@
 package ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.service;
 
+import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.entity.TipoAccion;
+import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.service.AuditoriaAccionesService;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.entity.EstadoRegistro;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.ConflictoException;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.RecursoNoEncontradoException;
@@ -16,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+
 import java.time.YearMonth;
 import java.util.Collection;
 import java.util.Comparator;
@@ -31,6 +34,7 @@ public class GestionRolesPagoService {
     private final PeriodoRepository periodoRepository;
     private final RolPagoRepository rolPagoRepository;
     private final DirectorioAdRepository directorioRepository;
+    private final AuditoriaAccionesService auditoria;
 
     @Transactional(readOnly = true)
     public ListadoPeriodoDto listar(YearMonth ym) {
@@ -48,14 +52,18 @@ public class GestionRolesPagoService {
     public RolPagoResumenDto inactivar(YearMonth ym, Long id) {
         RolPago rol = obtenerEditable(ym, id);
         rol.inactivar();
-        return resumen(rolPagoRepository.save(rol));
+        RolPago guardado = rolPagoRepository.save(rol);
+        auditoria.registrar(TipoAccion.ROL_INACTIVADO, ym.toString(), guardado.getId(), "Retirado por RRHH antes de publicar");
+        return resumen(guardado);
     }
 
     @Transactional
     public RolPagoResumenDto activar(YearMonth ym, Long id) {
         RolPago rol = obtenerEditable(ym, id);
         rol.activar();
-        return resumen(rolPagoRepository.save(rol));
+        RolPago guardado = rolPagoRepository.save(rol);
+        auditoria.registrar(TipoAccion.ROL_ACTIVADO, ym.toString(), guardado.getId(), "Repuesto por RRHH antes de publicar");
+        return resumen(guardado);
     }
 
     /** El rol debe pertenecer al período de la URL (evita tocar un rol ajeno cambiando el id) y no estar publicado. */
