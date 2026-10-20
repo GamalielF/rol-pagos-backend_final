@@ -5,12 +5,12 @@ import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.SolicitudInva
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 
-final class PeriodoPath {
+public final class PeriodoPath {
 
     private PeriodoPath() {
     }
 
-    static YearMonth parsear(String periodo) {
+    public static YearMonth parsear(String periodo) {
         try {
             return YearMonth.parse(periodo);
         } catch (DateTimeParseException e) {

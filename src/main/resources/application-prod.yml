@@ -1,0 +1,16 @@
+# ============================================================================
+# PRODUCCION: avisos por correo mediante la API de envío.
+#
+# 1) Operaciones/TI siembran la URL y la credencial en el Vault de producción:
+#      vault kv put secret/rol-pagos-backend/correo correo.api.url=https://...  correo.api.token='...'
+# 2) Se descomenta lo siguiente (y se pone la URL real del sistema de roles):
+#
+# spring:
+#   config:
+#     import:
+#       - vault://secret/rol-pagos-backend/correo
+# app:
+#   notificaciones:
+#     habilitada: true
+#     url-sistema: https://URL-DEL-SISTEMA-DE-ROLES
+# ============================================================================

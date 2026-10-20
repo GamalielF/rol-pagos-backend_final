@@ -10,6 +10,9 @@ import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.Periodo;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.PeriodoRepository;
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.entity.DirectorioAd;
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.repository.DirectorioAdRepository;
+import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.service.NombresDirectorio;
+import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.dto.response.ResultadoEncoladoDto;
+import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.service.NotificacionService;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.PublicacionDto;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.ResumenPeriodoDto;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.entity.RolPago;
@@ -38,6 +41,8 @@ public class PublicacionService {
     private final PeriodoRepository periodoRepository;
     private final RolPagoRepository rolPagoRepository;
     private final DirectorioAdRepository directorioRepository;
+    private final NombresDirectorio nombresDirectorio;
+    private final NotificacionService notificaciones;
     private final AuditoriaAccionesService auditoria;
     private final Clock clock;
 
@@ -56,8 +61,9 @@ public class PublicacionService {
         if (resumen.rolesActivos() == 0) {
             throw new ConflictoException("El período no tiene roles activos para publicar");
         }
-        if (resumen.sinRol() > 0 && !confirmarFaltantes) {
-            throw new ConflictoException("Hay " + resumen.sinRol() + " personas activas sin rol de pago. "
+        if ((resumen.sinRol() > 0 || resumen.rolesSinPersonaActiva() > 0) && !confirmarFaltantes) {
+            throw new ConflictoException("Hay " + resumen.sinRol() + " personas activas sin rol de pago y "
+                    + resumen.rolesSinPersonaActiva() + " roles cuyo titular no está activo en el AD. "
                     + "Revise el resumen y confirme la publicación para continuar");
         }
 
@@ -65,15 +71,19 @@ public class PublicacionService {
         periodo.setFechaPublicacion(LocalDateTime.now(clock));
         periodo.setPublicadoPor(publicadoPor);
         periodoRepository.save(periodo);
+
+        // Los avisos se encolan en esta misma transacción; el envío ocurre después, en segundo plano
+        ResultadoEncoladoDto avisos = notificaciones.encolarAlPublicar(periodo);
+
         auditoria.registrar(TipoAccion.PERIODO_PUBLICADO, ym.toString(), null,
                 "roles=" + resumen.rolesActivos() + ", sinRol=" + resumen.sinRol()
+                        + (resumen.rolesSinPersonaActiva() > 0 ? ", rolesSinPersona=" + resumen.rolesSinPersonaActiva() : "")
                         + (confirmarFaltantes ? ", faltantes confirmados" : ""));
-
-
-        log.info("Período {} publicado por {}: {} roles, {} personas sin rol",
-                ym, publicadoPor, resumen.rolesActivos(), resumen.sinRol());
+        log.info("Período {} publicado por {}: {} roles, {} personas sin rol, {} avisos encolados",
+                ym, publicadoPor, resumen.rolesActivos(), resumen.sinRol(), avisos.pendientes());
         return new PublicacionDto(ym.toString(), EstadoPeriodo.PUBLICADO.name(), periodo.getFechaPublicacion(),
-                publicadoPor, resumen.rolesActivos(), resumen.sinRol());
+                publicadoPor, resumen.rolesActivos(), resumen.sinRol(), resumen.rolesSinPersonaActiva(),
+                avisos.pendientes());
     }
 
     private Periodo buscar(YearMonth ym) {
@@ -83,28 +93,34 @@ public class PublicacionService {
 
     private ResumenPeriodoDto calcular(Periodo periodo) {
         List<RolPago> roles = rolPagoRepository.findByPeriodo_IdOrderByCedulaAsc(periodo.getId());
-        long activos = roles.stream().filter(r -> r.getEstadoRegistro() == EstadoRegistro.ACTIVO).count();
-        Set<String> conRolActivo = roles.stream()
-                .filter(r -> r.getEstadoRegistro() == EstadoRegistro.ACTIVO)
-                .map(RolPago::getCedula)
-                .collect(Collectors.toSet());
+        List<RolPago> activos = roles.stream().filter(r -> r.getEstadoRegistro() == EstadoRegistro.ACTIVO).toList();
+        Set<String> conRolActivo = activos.stream().map(RolPago::getCedula).collect(Collectors.toSet());
 
         // Una persona = una cédula: varias cuentas de la misma persona cuentan una sola vez
         Map<String, String> personasActivas = new HashMap<>();
-        directorioRepository.findAll().stream()
-                .filter(d -> d.getEstadoRegistro() == EstadoRegistro.ACTIVO)
+        directorioRepository.findAllByEstadoRegistro(EstadoRegistro.ACTIVO).stream()
                 .sorted(Comparator.comparing(DirectorioAd::getUsernameAd))
                 .forEach(d -> personasActivas.putIfAbsent(d.getCedula(),
                         d.getNombreCompleto() == null ? "(sin nombre)" : d.getNombreCompleto()));
 
+        // Sentido 1: personas activas que no tienen rol
         List<String> sinRol = personasActivas.entrySet().stream()
                 .filter(e -> !conRolActivo.contains(e.getKey()))
                 .map(Map.Entry::getValue)
                 .sorted(String.CASE_INSENSITIVE_ORDER)
                 .toList();
 
+        // Sentido 2: roles cuyo titular ya no está activo en el AD (no se leerán ni se avisarán)
+        List<RolPago> sinPersona = activos.stream().filter(r -> !personasActivas.containsKey(r.getCedula())).toList();
+        Map<String, String> nombresTitulares = nombresDirectorio.porCedula(
+                sinPersona.stream().map(RolPago::getCedula).toList());
+        List<String> nombresRolesSinPersona = sinPersona.stream()
+                .map(r -> nombresTitulares.getOrDefault(r.getCedula(), "(sin registro en el directorio)"))
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+
         return new ResumenPeriodoDto(YearMonth.from(periodo.getFechaPeriodo()).toString(),
-                periodo.getEstadoPeriodo().name(), activos, roles.size() - activos,
-                personasActivas.size(), sinRol.size(), sinRol);
+                periodo.getEstadoPeriodo().name(), activos.size(), roles.size() - activos.size(),
+                personasActivas.size(), sinRol.size(), sinRol, sinPersona.size(), nombresRolesSinPersona);
     }
 }

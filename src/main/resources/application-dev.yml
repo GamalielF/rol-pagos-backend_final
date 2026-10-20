@@ -45,3 +45,9 @@ app:
       - Content-Type
       - X-Dev-Usuario      # solo desarrollo: identidad simulada
       - X-Dev-Roles        # solo desarrollo
+  correo:
+    modo: SIMULADO
+    resultado-simulado: OK
+  notificaciones:
+    habilitada: true
+    url-sistema: http://localhost:4200

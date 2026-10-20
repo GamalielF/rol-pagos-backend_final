@@ -56,3 +56,22 @@ app:
     tamano-maximo-archivo: 5MB
     max-archivos-por-carga: 500
     max-paginas: 1
+  correo:
+    modo: API                                 # API | SIMULADO (SIMULADO solo en el perfil dev)
+    resultado-simulado: OK                    # OK | FALLO_TEMPORAL | FALLO_DEFINITIVO (solo con modo SIMULADO)
+    api:
+      url: ${correo.api.url:}                 # en producción llega desde Vault
+      token: ${correo.api.token:}             # en producción llega desde Vault
+      cabecera-autorizacion: Authorization    # ajustar al contrato (p. ej. X-API-Key)
+      esquema: Bearer                         # vacío = el token va solo, sin prefijo
+      cabecera-idempotencia: ""               # p. ej. Idempotency-Key, si la API lo soporta
+      timeout-conexion: 5s
+      timeout-lectura: 15s
+      # ssl-bundle: correo-api                # solo si la API usa un certificado de CA interna
+  notificaciones:
+    habilitada: false                         # se enciende por entorno
+    despacho-automatico: true                 # false = la cola se llena pero no se envía
+    intervalo-ms: 30000                       # cada cuánto se revisa la cola
+    lote: 50                                  # avisos por revisión
+    max-intentos: 5                           # después de esto el aviso queda FALLIDO
+    url-sistema: ""                           # enlace al sistema que lleva el correo

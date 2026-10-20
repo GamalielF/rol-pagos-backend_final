@@ -1,0 +1,37 @@
+package ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.correo;
+
+import java.time.YearMonth;
+import java.time.format.TextStyle;
+import java.util.Locale;
+
+/** El texto del aviso. No contiene datos del rol de pago ni nombres: solo el mes disponible. */
+public final class PlantillaAviso {
+
+    private static final Locale ES = Locale.forLanguageTag("es-EC");
+
+    private PlantillaAviso() {
+    }
+
+    public static String asunto(YearMonth periodo) {
+        return "Su rol de pago de " + mes(periodo) + " está disponible";
+    }
+
+    public static String cuerpo(YearMonth periodo, String urlSistema) {
+        StringBuilder texto = new StringBuilder();
+        texto.append("Estimado/a colaborador/a:\n\n");
+        texto.append("Su rol de pago correspondiente a ").append(mes(periodo)).append(" ya está disponible.\n\n");
+        if (urlSistema != null && !urlSistema.isBlank()) {
+            texto.append("Para consultarlo, ingrese al sistema de Roles de Pago:\n").append(urlSistema.trim()).append("\n\n");
+        }
+        texto.append("Por su seguridad, este mensaje no contiene información de su rol de pago, ")
+                .append("y nunca le solicitaremos su clave por correo.\n");
+        texto.append("Es un mensaje automático: por favor no responda a esta dirección. ")
+                .append("Si tiene dudas, comuníquese con Recursos Humanos.\n\n");
+        texto.append("COOPSANJOSE LTDA\n");
+        return texto.toString();
+    }
+
+    static String mes(YearMonth periodo) {
+        return periodo.getMonth().getDisplayName(TextStyle.FULL, ES) + " de " + periodo.getYear();
+    }
+}

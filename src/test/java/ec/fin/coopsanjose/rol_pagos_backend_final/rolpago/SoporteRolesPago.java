@@ -57,6 +57,7 @@ public abstract class SoporteRolesPago {
     @DynamicPropertySource
     static void rutaDeAlmacenamiento(DynamicPropertyRegistry registro) {
         registro.add("app.roles.ruta-base", ALMACEN::toString);
+        registro.add("app.notificaciones.despacho-automatico", () -> "false");
     }
 
     @BeforeEach
