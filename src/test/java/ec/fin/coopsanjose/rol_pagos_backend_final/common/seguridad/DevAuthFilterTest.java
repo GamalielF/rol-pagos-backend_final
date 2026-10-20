@@ -8,7 +8,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-
+import java.util.Set;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +19,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DevAuthFilterTest {
 
     private final Map<String, PerfilDirectorio> directorio = new HashMap<>();
-    private final DevAuthFilter filtro = new DevAuthFilter(username -> Optional.ofNullable(directorio.get(username)));
+    private final DevAuthFilter filtro = new DevAuthFilter(
+            username -> Optional.ofNullable(directorio.get(username)),
+            username -> new ResolutorRoles.RolesYPermisos(Set.of(Rol.EMPLEADO), Set.of()));
 
     @AfterEach
     void limpiarSesion() {

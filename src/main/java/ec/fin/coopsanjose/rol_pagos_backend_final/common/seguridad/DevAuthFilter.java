@@ -18,7 +18,8 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * SOLO DESARROLLO. Identifica al usuario por X-Dev-Usuario y X-Dev-Roles mientras no exista el login real.
+ * SOLO DESARROLLO. Identifica al usuario por X-Dev-Usuario. Con X-Dev-Roles simula los roles indicados;
+ * SIN esa cabecera usa los roles reales (base de datos y administradores iniciales).
  * SecurityConfig lo registra únicamente si app.seguridad.dev-auth-habilitado=true (perfil dev).
  */
 @Slf4j
@@ -28,9 +29,11 @@ public class DevAuthFilter extends OncePerRequestFilter {
     public static final String CABECERA_ROLES = "X-Dev-Roles";
 
     private final DirectorioUsuarios directorio;
+    private final ResolutorRoles resolutorRoles;
 
-    public DevAuthFilter(DirectorioUsuarios directorio) {
+    public DevAuthFilter(DirectorioUsuarios directorio, ResolutorRoles resolutorRoles) {
         this.directorio = directorio;
+        this.resolutorRoles = resolutorRoles;
     }
 
     @Override
@@ -45,13 +48,19 @@ public class DevAuthFilter extends OncePerRequestFilter {
                 // Deshabilitado en el AD: sin sesión (la petición sigue anónima y recibe 401)
                 log.warn("Usuario inactivo en el directorio: se rechaza la sesión de desarrollo");
             } else {
-                Set<Rol> roles = leerRoles(request.getHeader(CABECERA_ROLES));
-                UsuarioAutenticado usuario = new UsuarioAutenticado(
-                        perfil.map(PerfilDirectorio::username).orElse(solicitado),
-                        perfil.map(PerfilDirectorio::cedula).orElse(null),
-                        perfil.map(PerfilDirectorio::nombre).orElse(null),
-                        roles);
-                List<SimpleGrantedAuthority> autoridades = roles.stream()
+                String username = perfil.map(PerfilDirectorio::username).orElse(solicitado);
+                String cedula = perfil.map(PerfilDirectorio::cedula).orElse(null);
+                String nombre = perfil.map(PerfilDirectorio::nombre).orElse(null);
+                String cabeceraRoles = limpiar(request.getHeader(CABECERA_ROLES));
+
+                UsuarioAutenticado usuario;
+                if (cabeceraRoles != null) {
+                    usuario = new UsuarioAutenticado(username, cedula, nombre, leerRoles(cabeceraRoles));   // simulación
+                } else {
+                    ResolutorRoles.RolesYPermisos reales = resolutorRoles.resolver(username);               // roles reales
+                    usuario = new UsuarioAutenticado(username, cedula, nombre, reales.roles(), reales.permisos());
+                }
+                List<SimpleGrantedAuthority> autoridades = usuario.roles().stream()
                         .map(rol -> new SimpleGrantedAuthority(rol.autoridad()))
                         .toList();
                 SecurityContextHolder.getContext().setAuthentication(
@@ -61,20 +70,18 @@ public class DevAuthFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    /** Roles separados por coma. Los desconocidos se ignoran; si no queda ninguno, EMPLEADO. */
+    /** Roles separados por coma. Los desconocidos se ignoran; si no queda ninguno, EMPLEADO (nunca se escala). */
     private Set<Rol> leerRoles(String cabecera) {
         Set<Rol> roles = EnumSet.noneOf(Rol.class);
-        if (cabecera != null) {
-            for (String texto : cabecera.split(",")) {
-                String nombre = texto.trim().toUpperCase(Locale.ROOT);
-                if (nombre.isEmpty()) {
-                    continue;
-                }
-                try {
-                    roles.add(Rol.valueOf(nombre));
-                } catch (IllegalArgumentException e) {
-                    log.warn("Rol desconocido ignorado: {}", nombre);
-                }
+        for (String texto : cabecera.split(",")) {
+            String nombre = texto.trim().toUpperCase(Locale.ROOT);
+            if (nombre.isEmpty()) {
+                continue;
+            }
+            try {
+                roles.add(Rol.valueOf(nombre));
+            } catch (IllegalArgumentException e) {
+                log.warn("Rol desconocido ignorado: {}", nombre);
             }
         }
         if (roles.isEmpty()) {

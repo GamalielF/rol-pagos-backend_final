@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import ec.fin.coopsanjose.rol_pagos_backend_final.common.seguridad.ResolutorRoles;
 import org.springframework.core.env.Profiles;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -17,6 +18,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import ec.fin.coopsanjose.rol_pagos_backend_final.common.seguridad.ResolutorRoles;
 import org.springframework.security.config.Customizer;
 
 @Slf4j
@@ -30,6 +32,7 @@ public class SecurityConfig {
                                                  SeguridadRespuestaHandler respuestas,
                                                  Environment entorno,
                                                  DirectorioUsuarios directorio,
+                                                 ResolutorRoles resolutorRoles,
                                                  @Value("${app.seguridad.dev-auth-habilitado:false}") boolean devAuth)
             throws Exception {
 
@@ -55,7 +58,7 @@ public class SecurityConfig {
 
         if (devAuth) {
             log.warn("AUTENTICACION DE DESARROLLO ACTIVA: se acepta la identidad enviada en las cabeceras X-Dev-*");
-            http.addFilterBefore(new DevAuthFilter(directorio), UsernamePasswordAuthenticationFilter.class);
+            http.addFilterBefore(new DevAuthFilter(directorio, resolutorRoles), UsernamePasswordAuthenticationFilter.class);
         } else {
             log.info("Autenticacion de desarrollo desactivada");
         }

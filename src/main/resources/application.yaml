@@ -56,6 +56,10 @@ app:
     tamano-maximo-archivo: 5MB
     max-archivos-por-carga: 500
     max-paginas: 1
+  seguridad:
+    administradores-iniciales: # ADMIN desde el arranque. No se pueden quitar desde la API, solo aquí
+      - fsepa
+      - msavala
   correo:
     modo: API                                 # API | SIMULADO (SIMULADO solo en el perfil dev)
     resultado-simulado: OK                    # OK | FALLO_TEMPORAL | FALLO_DEFINITIVO (solo con modo SIMULADO)
