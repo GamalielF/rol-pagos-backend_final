@@ -79,6 +79,10 @@ app:
       cabecera-idempotencia: ""               # p. ej. Idempotency-Key, si la API lo soporta
       timeout-conexion: 5s
       timeout-lectura: 15s
+      canal: EMAIL                            # canal que espera la API
+      codigo-plantilla: ""                    # vacío = se envían el asunto y el texto propios; con valor = plantilla de la API
+      variables: { }                           # variables FIJAS de la plantilla (p. ej. NombreEmpresa)
+      redirigir-a: ""                         # SOLO PRUEBAS: con valor, TODO aviso sale a esta única dirección
       # ssl-bundle: correo-api                # solo si la API usa un certificado de CA interna
   notificaciones:
     habilitada: false                         # se enciende por entorno

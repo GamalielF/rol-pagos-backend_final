@@ -11,6 +11,14 @@ import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
 import org.springframework.security.oauth2.jwt.JwtValidationException;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.stereotype.Component;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.MappedJwtClaimSetConverter;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -44,8 +52,9 @@ public class ValidadorTokenAcceso {
         RSAPublicKey clave = ClavePublica.cargar(texto);
         Duration vidaMaxima = propiedades.vidaMaxima();
         NimbusJwtDecoder nuevo = NimbusJwtDecoder.withPublicKey(clave)
-                .signatureAlgorithm(SignatureAlgorithm.RS256)   // fijo: evita la "confusión de algoritmo" (none, HS256...)
+                .signatureAlgorithm(SignatureAlgorithm.RS256)
                 .build();
+        nuevo.setClaimSetConverter(sinFechaDeEmisionInventada());
         nuevo.setJwtValidator(new DelegatingOAuth2TokenValidator<Jwt>(
                 new JwtTimestampValidator(propiedades.desfaseReloj()),
                 ValidadorTokenAcceso::validarTipo,
@@ -79,7 +88,18 @@ public class ValidadorTokenAcceso {
     }
 
     // ------------------------------------------------------------ reglas propias
-
+    /** Spring inventa iat = exp - 1 s si el token no trae iat; así una vida larga pasaría por "1 segundo". Aquí se conserva la ausencia. */
+    private static Converter<Map<String, Object>, Map<String, Object>> sinFechaDeEmisionInventada() {
+        Converter<Map<String, Object>, Map<String, Object>> porDefecto =
+                MappedJwtClaimSetConverter.withDefaults(Collections.emptyMap());
+        return brutos -> {
+            Map<String, Object> convertidos = new HashMap<>(Objects.requireNonNull(porDefecto.convert(brutos)));
+            if (!brutos.containsKey(JwtClaimNames.IAT)) {
+                convertidos.remove(JwtClaimNames.IAT);
+            }
+            return convertidos;
+        };
+    }
     /** Solo sesiones: sin "type" (tokens actuales) o ACCESS. El token temporal del paso MFA y cualquier otro tipo, fuera. */
     private static OAuth2TokenValidatorResult validarTipo(Jwt jwt) {
         Object tipo = jwt.getClaims().get("type");

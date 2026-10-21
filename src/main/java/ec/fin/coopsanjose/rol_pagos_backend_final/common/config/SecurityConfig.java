@@ -39,16 +39,8 @@ public class SecurityConfig {
                                                  @Value("${app.seguridad.dev-auth-habilitado:false}") boolean devAuth)
             throws Exception {
         // Seguro anti-accidentes: el filtro de desarrollo jamás puede convivir con producción
-        if (devAuth && entorno.acceptsProfiles(Profiles.of("prod"))) {
-            throw new IllegalStateException(
-                    "app.seguridad.dev-auth-habilitado no puede estar activo con el perfil prod");
-        }
         boolean conJwt = validadorToken.estaConfigurado();
-        if (!conJwt && !devAuth) {
-            // Sin esto el sistema arrancaría "abierto" a nadie: mejor que no arranque
-            throw new IllegalStateException(
-                    "No hay forma de autenticar usuarios: configure app.jwt.clave-publica (producción) o active el modo de desarrollo");
-        }
+        verificarAutenticacion(devAuth, entorno.acceptsProfiles(Profiles.of("prod")), conJwt);
 
         http
                 .cors(Customizer.withDefaults())      // orígenes permitidos: CorsConfig (app.cors.*)
@@ -76,6 +68,22 @@ public class SecurityConfig {
             log.info("Autenticacion de desarrollo desactivada");
         }
         return http.build();
+    }
+
+    /**
+     * Este sistema no autentica con usuario y clave locales: la identidad vendrá del AD.
+     * Declarar este bean evita que Spring Boot cree un usuario con una clave generada.
+     */
+    /** El sistema se niega a arrancar si el modo de desarrollo convive con producción o si nadie podría autenticarse. */
+    static void verificarAutenticacion(boolean devAuth, boolean prod, boolean conJwt) {
+        if (devAuth && prod) {
+            throw new IllegalStateException(
+                    "app.seguridad.dev-auth-habilitado no puede estar activo con el perfil prod");
+        }
+        if (!conJwt && !devAuth) {
+            throw new IllegalStateException(
+                    "No hay forma de autenticar usuarios: configure app.jwt.clave-publica (producción) o active el modo de desarrollo");
+        }
     }
 
     /**

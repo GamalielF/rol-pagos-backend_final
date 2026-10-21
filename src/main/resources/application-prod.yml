@@ -48,4 +48,7 @@
 #     url-sistema: https://URL-DEL-FRONTEND
 #   correo:
 #     modo: API
+#     api:
+#       codigo-plantilla: ROL_PAGO_DISPONIBLE   # si la API lo exige; lo define el dueño de la API
+#       redirigir-a: ""                          # DEBE quedar vacío en producción
 # ============================================================================

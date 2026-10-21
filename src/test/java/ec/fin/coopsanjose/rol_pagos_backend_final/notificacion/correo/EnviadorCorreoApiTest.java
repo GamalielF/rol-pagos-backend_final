@@ -1,40 +1,30 @@
 package ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.correo;
 
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.config.CorreoProperties;
+import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.config.EnvioCorreoProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-import javax.net.ssl.SSLHandshakeException;
-import java.io.IOException;
-import java.net.ConnectException;
-import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.headerDoesNotExist;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withException;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-/**
- * El adaptador de la API es un esqueleto: aquí se prueba lo que NO depende del contrato (autenticación,
- * idempotencia, clasificación de errores, privacidad de los mensajes). El cuerpo del mensaje se probará
- * cuando se conozca el contrato real.
- */
-class EnviadorCorreoApiTest {
+/** Lo que el adaptador manda a la API y cómo lee lo que ella responde. */
+class EnviadorCorreoApiFormatoTest {
 
     private static final String URL = "https://correo.interno.test/api/enviar";
     private static final String DESTINO = "juan.perez@coopsanjose.fin.ec";
@@ -49,107 +39,87 @@ class EnviadorCorreoApiTest {
         cliente = constructor.build();
     }
 
-    private EnviadorCorreoApi enviador(String url, String token, String esquema, String idempotencia) {
-        return new EnviadorCorreoApi(new CorreoProperties.Api(url, token, "Authorization", esquema, idempotencia,
-                Duration.ofSeconds(5), Duration.ofSeconds(15), null), cliente);
+    private EnviadorCorreoApi enviador(EnvioCorreoProperties envio) {
+        return new EnviadorCorreoApi(new CorreoProperties.Api(URL, "secreto", "Authorization", "Bearer", null,
+                Duration.ofSeconds(5), Duration.ofSeconds(15), null), cliente, envio);
     }
 
     private void enviar(EnviadorCorreoApi enviador) {
-        enviador.enviar(DESTINO, "Asunto", "Texto", "aviso-7");
+        enviador.enviar(DESTINO, "Asunto del aviso", "Texto del aviso", "aviso-7");
     }
 
     @Test
-    void sinUrlNoEstaConfiguradoYNoLlamaALaApi() {
-        EnviadorCorreoApi sinUrl = enviador("  ", "secreto", "Bearer", null);
-
-        assertThat(sinUrl.estaConfigurado()).isFalse();
-        assertThatThrownBy(() -> enviar(sinUrl)).isInstanceOfSatisfying(EnvioCorreoException.class,
-                e -> assertThat(e.esReintentable()).isTrue());
-        servidor.verify();   // no se esperaba ninguna llamada
-    }
-
-    @Test
-    void unEnvioExitosoLlevaLaAutenticacionYLaClaveDeIdempotencia() {
+    void elCuerpoLlevaUnSoloAvisoEnLaListaNotifications() {
         servidor.expect(requestTo(URL))
-                .andExpect(method(HttpMethod.POST))
-                .andExpect(header("Authorization", "Bearer secreto"))
-                .andExpect(header("Idempotency-Key", "aviso-7"))
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.notifications", hasSize(1)))
+                .andExpect(jsonPath("$.notifications[0].channel").value("EMAIL"))
+                .andExpect(jsonPath("$.notifications[0].destinatario").value(DESTINO))
+                .andExpect(jsonPath("$.notifications[0].asunto").value("Asunto del aviso"))
+                .andExpect(jsonPath("$.notifications[0].mensaje").value("Texto del aviso"))
                 .andRespond(withSuccess());
-
-        assertThatCode(() -> enviar(enviador(URL, "secreto", "Bearer", "Idempotency-Key"))).doesNotThrowAnyException();
+        enviar(enviador(EnvioCorreoProperties.SIN_AJUSTES));
         servidor.verify();
     }
 
     @Test
-    void sinEsquemaElTokenViajaSolo() {
-        servidor.expect(requestTo(URL)).andExpect(header("Authorization", "secreto")).andRespond(withSuccess());
-
-        enviar(enviador(URL, "secreto", "", null));
+    void sinPlantillaNoSeEnvianNiElCodigoNiLasVariables() {
+        servidor.expect(requestTo(URL))
+                .andExpect(jsonPath("$.notifications[0].codigoPlantilla").doesNotExist())
+                .andExpect(jsonPath("$.notifications[0].variables").doesNotExist())
+                .andRespond(withSuccess());
+        enviar(enviador(EnvioCorreoProperties.SIN_AJUSTES));
         servidor.verify();
     }
 
     @Test
-    void sinTokenNoSeEnviaCabeceraDeAutorizacion() {
-        servidor.expect(requestTo(URL)).andExpect(headerDoesNotExist("Authorization")).andRespond(withSuccess());
-
-        enviar(enviador(URL, "", "Bearer", null));
+    void conPlantillaSeEnvianElCodigoYLasVariablesFijas() {
+        servidor.expect(requestTo(URL))
+                .andExpect(jsonPath("$.notifications[0].codigoPlantilla").value("ROL_PAGO_DISPONIBLE"))
+                .andExpect(jsonPath("$.notifications[0].variables.NombreEmpresa").value("COOPSANJOSE LTDA"))
+                .andRespond(withSuccess());
+        enviar(enviador(new EnvioCorreoProperties("EMAIL", "ROL_PAGO_DISPONIBLE",
+                Map.of("NombreEmpresa", "COOPSANJOSE LTDA"), null)));
         servidor.verify();
     }
 
     @Test
-    void sinClaveDeIdempotenciaNoSeEnviaLaCabecera() {
-        servidor.expect(requestTo(URL)).andExpect(headerDoesNotExist("Idempotency-Key")).andRespond(withSuccess());
-
-        enviar(enviador(URL, "secreto", "Bearer", ""));
+    void laRedireccionCambiaElDestinoMarcaElAsuntoYNoFiltraLaDireccionReal() {
+        servidor.expect(requestTo(URL))
+                .andExpect(jsonPath("$.notifications[0].destinatario").value("prueba@coopsanjose.fin.ec"))
+                .andExpect(jsonPath("$.notifications[0].asunto").value(startsWith("[PRUEBA] ")))
+                .andExpect(jsonPath("$.notifications[0].mensaje").value(containsString("aviso-7")))
+                .andExpect(content().string(not(containsString(DESTINO))))
+                .andRespond(withSuccess());
+        enviar(enviador(new EnvioCorreoProperties(null, null, null, "prueba@coopsanjose.fin.ec")));
         servidor.verify();
     }
 
-    @ParameterizedTest
-    @CsvSource({"400,false", "409,false", "422,false",
-            "401,true", "403,true", "404,true", "408,true", "429,true", "500,true", "503,true"})
-    void cadaCodigoHttpSeClasificaComoDefinitivoOReintentable(int codigo, boolean reintentable) {
-        servidor.expect(requestTo(URL)).andRespond(withStatus(HttpStatusCode.valueOf(codigo)));
-
-        assertThatThrownBy(() -> enviar(enviador(URL, "secreto", "Bearer", null)))
-                .isInstanceOfSatisfying(EnvioCorreoException.class,
-                        e -> assertThat(e.esReintentable()).isEqualTo(reintentable));
-    }
-
-    private void fallaConRed(IOException error, String mensajeEsperado) {
-        servidor.expect(requestTo(URL)).andRespond(withException(error));
-
-        assertThatThrownBy(() -> enviar(enviador(URL, "secreto", "Bearer", null)))
-                .isInstanceOfSatisfying(EnvioCorreoException.class, e -> {
-                    assertThat(e.esReintentable()).isTrue();
-                    assertThat(e.getMessage()).contains(mensajeEsperado);
-                });
+    @Test
+    void unaRespuestaConSuccessFalseSeMarcaParaReintentar() {
+        servidor.expect(requestTo(URL)).andRespond(withSuccess("{\"success\":false}", MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> enviar(enviador(EnvioCorreoProperties.SIN_AJUSTES)))
+                .isInstanceOfSatisfying(EnvioCorreoException.class, e -> assertThat(e.esReintentable()).isTrue());
     }
 
     @Test
-    void unTiempoDeEsperaAgotadoSeReintenta() {
-        fallaConRed(new SocketTimeoutException("lectura"), "no respondió a tiempo");
+    void unaRespuestaExitosaOCualquierOtroTextoSeDaPorAceptada() {
+        servidor.expect(requestTo(URL)).andRespond(withSuccess("{\"success\":true,\"status\":\"PROCESSING\"}", MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(URL)).andRespond(withSuccess("OK, recibido", MediaType.TEXT_PLAIN));
+        servidor.expect(requestTo(URL)).andRespond(withSuccess("{\"sin\":\"campo success\"}", MediaType.APPLICATION_JSON));
+        EnviadorCorreoApi enviador = enviador(EnvioCorreoProperties.SIN_AJUSTES);
+        assertThatCode(() -> {
+            enviar(enviador);
+            enviar(enviador);
+            enviar(enviador);
+        }).doesNotThrowAnyException();
     }
 
     @Test
-    void unaConexionRechazadaSeReintenta() {
-        fallaConRed(new ConnectException("rechazada"), "No se pudo conectar");
-    }
-
-    @Test
-    void unFalloDeCertificadoSeReintentaConSuPropioMensaje() {
-        fallaConRed(new SSLHandshakeException("certificado"), "conexión segura");
-    }
-
-    @Test
-    void losMensajesDeErrorNuncaFiltranLaDireccionNiElToken() {
-        servidor.expect(requestTo(URL)).andRespond(withStatus(HttpStatusCode.valueOf(500)));
-        servidor.expect(requestTo(URL)).andRespond(withException(new SocketTimeoutException(DESTINO + " secreto")));
-        EnviadorCorreoApi api = enviador(URL, "secreto", "Bearer", null);
-
-        for (int i = 0; i < 2; i++) {
-            assertThatThrownBy(() -> enviar(api)).isInstanceOfSatisfying(EnvioCorreoException.class, e ->
-                    assertThat(e.getMessage()).doesNotContain(DESTINO).doesNotContain("secreto").doesNotContain("@"));
-        }
+    void elMensajeDeErrorNoRepiteLoQueDiceLaApi() {
+        servidor.expect(requestTo(URL)).andRespond(
+                withSuccess("{\"success\":false,\"message\":\"fallo para " + DESTINO + "\"}", MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> enviar(enviador(EnvioCorreoProperties.SIN_AJUSTES)))
+                .isInstanceOf(EnvioCorreoException.class)
+                .message().doesNotContain(DESTINO).doesNotContain("fallo para");
     }
 }

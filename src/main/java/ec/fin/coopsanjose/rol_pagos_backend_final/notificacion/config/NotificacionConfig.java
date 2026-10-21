@@ -11,6 +11,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
+
 import java.net.http.HttpClient;
 
 @Configuration
@@ -20,7 +21,8 @@ public class NotificacionConfig {
     @Bean
     public EnviadorCorreo enviadorCorreo(CorreoProperties propiedades, SslBundles sslBundles, Environment entorno) {
         return switch (propiedades.modo()) {
-            case API -> new EnviadorCorreoApi(propiedades.api(), crearRestClient(propiedades.api(), sslBundles));
+            case API -> new EnviadorCorreoApi(propiedades.api(), crearRestClient(propiedades.api(), sslBundles),
+                    EnvioCorreoProperties.desde(entorno));
             case SIMULADO -> {
                 if (!entorno.matchesProfiles("dev")) {
                     // Un envío simulado en producción marcaría como "enviados" avisos que nunca salieron

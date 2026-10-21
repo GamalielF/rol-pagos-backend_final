@@ -1,41 +1,61 @@
 package ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.correo;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.config.CorreoProperties;
+import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.config.EnvioCorreoProperties;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import javax.net.ssl.SSLException;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.net.http.HttpTimeoutException;
+import java.util.List;
+import java.util.Map;
 
 /**
- * Envío mediante la API de correo de la cooperativa.
- * ESQUELETO: la conexión, la autenticación, los tiempos de espera y la clasificación de errores son definitivos;
- * lo que depende del contrato de la API está marcado con "AJUSTAR". No hace nada hasta que se configure app.correo.api.url.
+ * Envío mediante la API de correo de la cooperativa. Manda un aviso por llamada, en el formato
+ * {"notifications":[{...}]}. La API acepta el lote y lo procesa después: un 200 significa "aceptado".
  */
+@Slf4j
 public class EnviadorCorreoApi implements EnviadorCorreo {
 
-    /**
-     * AJUSTAR: nombres y tipos de los campos según el contrato real de la API
-     * (por ejemplo "destinatario" en vez de "para", un campo "html", un identificador de plantilla...).
-     */
-    record SolicitudEnvio(@JsonProperty("para") String para,
-                          @JsonProperty("asunto") String asunto,
-                          @JsonProperty("mensaje") String mensaje) {
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    record Notificacion(@JsonProperty("channel") String channel,
+                        @JsonProperty("destinatario") String destinatario,
+                        @JsonProperty("asunto") String asunto,
+                        @JsonProperty("mensaje") String mensaje,
+                        @JsonProperty("codigoPlantilla") @JsonInclude(JsonInclude.Include.NON_NULL) String codigoPlantilla,
+                        @JsonProperty("variables") @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String, String> variables) {
+    }
+
+    record SolicitudEnvio(@JsonProperty("notifications") List<Notificacion> notifications) {
     }
 
     private final CorreoProperties.Api api;
     private final RestClient restClient;
+    private final EnvioCorreoProperties envio;
 
     public EnviadorCorreoApi(CorreoProperties.Api api, RestClient restClient) {
+        this(api, restClient, EnvioCorreoProperties.SIN_AJUSTES);
+    }
+
+    public EnviadorCorreoApi(CorreoProperties.Api api, RestClient restClient, EnvioCorreoProperties envio) {
         this.api = api;
         this.restClient = restClient;
+        this.envio = envio;
+        if (envio.redirige()) {
+            log.warn("REDIRECCION DE CORREO ACTIVA: todos los avisos saldran a una unica direccion de prueba");
+        }
     }
 
     @Override
@@ -48,8 +68,9 @@ public class EnviadorCorreoApi implements EnviadorCorreo {
         if (!estaConfigurado()) {
             throw new EnvioCorreoException("La API de correo no está configurada", true, null);
         }
+        String respuesta;
         try {
-            restClient.post()
+            respuesta = restClient.post()
                     .uri(api.url().trim())
                     .contentType(MediaType.APPLICATION_JSON)
                     .headers(cabeceras -> {
@@ -61,9 +82,9 @@ public class EnviadorCorreoApi implements EnviadorCorreo {
                             cabeceras.set(api.cabeceraIdempotencia(), referencia);   // evita duplicados al reintentar
                         }
                     })
-                    .body(new SolicitudEnvio(destinatario, asunto, texto))
+                    .body(new SolicitudEnvio(List.of(armar(destinatario, asunto, texto, referencia))))
                     .retrieve()
-                    .toBodilessEntity();   // AJUSTAR: si la API responde 200 con un indicador de error en el cuerpo, leerlo aquí
+                    .body(String.class);
         } catch (RestClientResponseException e) {
             throw clasificarEstado(e.getStatusCode().value(), e);
         } catch (ResourceAccessException e) {
@@ -71,9 +92,41 @@ public class EnviadorCorreoApi implements EnviadorCorreo {
         } catch (RestClientException e) {
             throw new EnvioCorreoException("La API de correo respondió de forma inesperada", true, e);
         }
+        verificarRespuesta(respuesta);
     }
 
-    /** AJUSTAR: afinar según los códigos que documente la API. */
+    private Notificacion armar(String destinatario, String asunto, String texto, String referencia) {
+        boolean redirigido = envio.redirige();
+        String para = redirigido ? envio.redirigirA().trim() : destinatario;
+        String asuntoFinal = redirigido ? "[PRUEBA] " + asunto : asunto;
+        String mensaje = redirigido
+                ? "Mensaje de prueba (" + referencia + "): el destinatario real no recibió este aviso.\n\n" + texto
+                : texto;
+        boolean plantilla = envio.usaPlantilla();
+        return new Notificacion(envio.canal(), para, asuntoFinal, mensaje,
+                plantilla ? envio.codigoPlantilla().trim() : null, plantilla ? envio.variables() : null);
+    }
+
+    /**
+     * La API responde 200 aunque el trabajo se procese después. Solo se puede rechazar lo que ella misma marque
+     * como no aceptado; cualquier otra cosa se da por aceptada, porque reintentar un correo ya enviado lo duplica.
+     */
+    private static void verificarRespuesta(String cuerpo) {
+        if (cuerpo == null || cuerpo.isBlank()) {
+            return;
+        }
+        JsonNode nodo;
+        try {
+            nodo = JSON.readTree(cuerpo);
+        } catch (RuntimeException e) {
+            return;
+        }
+        JsonNode exito = nodo == null ? null : nodo.get("success");
+        if (exito != null && exito.isBoolean() && !exito.booleanValue()) {
+            throw new EnvioCorreoException("La API de correo indicó que no aceptó el envío", true, null);
+        }
+    }
+
     private static EnvioCorreoException clasificarEstado(int codigo, Exception causa) {
         if (codigo == 401 || codigo == 403) {
             return new EnvioCorreoException("La API de correo rechazó las credenciales (HTTP " + codigo + ")", true, causa);

@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  address: 127.0.0.1   # solo escucha en este equipo: en dev se puede suplantar a cualquier usuario
 
 spring:
   config:
