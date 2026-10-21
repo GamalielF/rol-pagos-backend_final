@@ -1,0 +1,10 @@
+target/
+.git/
+.idea/
+.env
+.env.*
+certs/dev/
+data/
+docker/runtime/
+*.pem
+*.key

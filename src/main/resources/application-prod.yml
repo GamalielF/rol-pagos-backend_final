@@ -1,16 +1,51 @@
 # ============================================================================
-# PRODUCCION: avisos por correo mediante la API de envío.
+# PRODUCCION (PLANTILLA: nada está activo; TI define los valores reales)
 #
-# 1) Operaciones/TI siembran la URL y la credencial en el Vault de producción:
-#      vault kv put secret/rol-pagos-backend/correo correo.api.url=https://...  correo.api.token='...'
-# 2) Se descomenta lo siguiente (y se pone la URL real del sistema de roles):
+# Antes de activar: (1) el autenticador debe corregir /auth/refresh y agregar un logout,
+# (2) debe existir un par de claves de firma PROPIO de producción (distinto al de desarrollo),
+# (3) la API de correo debe ser la definitiva.
 #
+# Los secretos NUNCA van aquí: se siembran en el Vault de producción.
+#   vault kv put secret/rol-pagos-backend/db   db.username=... db.password=...
+#   vault kv put secret/rol-pagos-backend/ad   ad.url-base=https://...  ad.token='...'
+#   vault kv put secret/rol-pagos-backend/jwt  jwt.public-key=@clave-publica-produccion.pem
+#   vault kv put secret/rol-pagos-backend/correo correo.api.url=https://...  correo.api.token='...'
+#
+# server:
+#   forward-headers-strategy: native     # SOLO detrás de un proxy de confianza (Traefik/Nginx): da la IP real del cliente
 # spring:
 #   config:
 #     import:
+#       - vault://secret/rol-pagos-backend/db
+#       - vault://secret/rol-pagos-backend/ad
+#       - vault://secret/rol-pagos-backend/jwt
 #       - vault://secret/rol-pagos-backend/correo
+#   datasource:
+#     driver-class-name: com.mysql.cj.jdbc.Driver
+#     url: jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}?useUnicode=true&serverTimezone=America/Guayaquil
+#     username: ${db.username}
+#     password: ${db.password}
+#   cloud:
+#     vault:
+#       enabled: true
+#       uri: https://VAULT-DE-PRODUCCION        # lo define TI
+#       authentication: APPROLE                 # o el método que indique TI
+#       kv:
+#         enabled: true
+#         backend: secret                       # nombre del motor de secretos que indique TI
+#       fail-fast: true
 # app:
+#   cors:
+#     origenes-permitidos:
+#       - https://URL-DEL-FRONTEND              # dominio real, con https y sin barra final
+#     cabeceras-permitidas:
+#       - Authorization
+#       - Content-Type
+#   roles:
+#     ruta-base: /datos/roles-pago              # disco persistente y con respaldo
 #   notificaciones:
-#     habilitada: true
-#     url-sistema: https://URL-DEL-SISTEMA-DE-ROLES
+#     habilitada: false                         # se enciende cuando exista la API de correo definitiva
+#     url-sistema: https://URL-DEL-FRONTEND
+#   correo:
+#     modo: API
 # ============================================================================

@@ -45,6 +45,8 @@ app:
       - Content-Type
       - X-Dev-Usuario      # solo desarrollo: identidad simulada
       - X-Dev-Roles        # solo desarrollo
+  jwt:
+    clave-publica-archivo: ${JWT_PUBLIC_KEY_FILE:./certs/jwt-public.pem}
   correo:
     modo: SIMULADO
     resultado-simulado: OK

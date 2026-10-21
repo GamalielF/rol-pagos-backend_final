@@ -1,6 +1,7 @@
 package ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.repository;
 
 import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.entity.AccesoRolPago;
+import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.entity.DetalleAcceso;
 import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.entity.ResultadoAcceso;
 import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.entity.TipoAcceso;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.repository.BaseRepository;
@@ -55,4 +56,8 @@ public interface AccesoRolPagoRepository extends BaseRepository<AccesoRolPago> {
     List<Long> rolesLeidos(@Param("ids") Collection<Long> ids,
                            @Param("permitido") ResultadoAcceso permitido,
                            @Param("propia") TipoAcceso propia);
+
+    /** Cuántas veces ese usuario tecleó una cédula ajena desde 'desde'. Base del límite de intentos. */
+    long countByUsernameAdAndResultadoAndDetalleAndCreadoEnAfter(String usernameAd, ResultadoAcceso resultado,
+                                                                 DetalleAcceso detalle, LocalDateTime desde);
 }

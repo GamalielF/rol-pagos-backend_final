@@ -12,6 +12,12 @@ import java.util.Optional;
 
 public interface RolPagoRepository extends BaseRepository<RolPago> {
 
+    interface ConteoPorPeriodo {
+        Long getPeriodoId();
+
+        long getTotal();
+    }
+
     Optional<RolPago> findByPeriodo_IdAndCedula(Long idPeriodo, String cedula);
 
     List<RolPago> findByPeriodo_IdOrderByCedulaAsc(Long idPeriodo);
@@ -26,4 +32,8 @@ public interface RolPagoRepository extends BaseRepository<RolPago> {
 
     @Query("select r from RolPago r join fetch r.periodo where r.id = :id")
     Optional<RolPago> buscarConPeriodo(@Param("id") Long id);
+
+    @Query("select r.periodo.id as periodoId, count(r) as total from RolPago r "
+            + "where r.estadoRegistro = :estado group by r.periodo.id")
+    List<ConteoPorPeriodo> contarPorPeriodo(@Param("estado") EstadoRegistro estado);
 }

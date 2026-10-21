@@ -60,6 +60,14 @@ app:
     administradores-iniciales: # ADMIN desde el arranque. No se pueden quitar desde la API, solo aquí
       - fsepa
       - msavala
+    limite-intentos: # defensa contra quien prueba cédulas ajenas
+      maximo: 5
+      ventana: 15m
+  jwt:
+    clave-publica: ${jwt.public-key:}                  # PRODUCCIÓN: llega desde Vault (clave jwt.public-key)
+    clave-publica-archivo: ${JWT_PUBLIC_KEY_FILE:}     # solo desarrollo
+    vida-maxima: PT24H5M          # sesión de 24 h del autenticador + 5 min. Rechaza los tokens de renovación (7 días)
+    desfase-reloj: 60s
   correo:
     modo: API                                 # API | SIMULADO (SIMULADO solo en el perfil dev)
     resultado-simulado: OK                    # OK | FALLO_TEMPORAL | FALLO_DEFINITIVO (solo con modo SIMULADO)

@@ -13,6 +13,7 @@ import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.RolPagoPd
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.entity.RolPago;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.repository.RolPagoRepository;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.storage.AlmacenRolesPago;
+import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.DemasiadosIntentosException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -38,12 +39,17 @@ public class ConsultaRolPagoService {
     private final AlmacenRolesPago almacen;
     private final PoliticaAccesoRol politica;
     private final AuditoriaAccesosService auditoria;
+    private final LimiteIntentosConsulta limite;
 
     /** El titular consulta SU rol. La búsqueda usa la cédula de la sesión, nunca la que llegó en la petición. */
     public RolPagoPdfDto consultarPropio(UsuarioAutenticado usuario, String cedulaIngresada,
                                          YearMonth periodo, String ip) {
         String periodoTexto = periodo == null ? null : periodo.toString();
-
+        if (usuario != null && limite.estaBloqueado(usuario.username())) {
+            registrar(TipoAcceso.CONSULTA_PROPIA, ResultadoAcceso.DENEGADO, DetalleAcceso.BLOQUEADO_POR_INTENTOS,
+                    usuario, cedulaIngresada, periodoTexto, null, null, ip);
+            throw new DemasiadosIntentosException();
+        }
         DetalleAcceso decision = politica.evaluarConsultaPropia(usuario, cedulaIngresada);
         if (decision != DetalleAcceso.OK) {
             registrar(TipoAcceso.CONSULTA_PROPIA, ResultadoAcceso.DENEGADO, decision, usuario,
