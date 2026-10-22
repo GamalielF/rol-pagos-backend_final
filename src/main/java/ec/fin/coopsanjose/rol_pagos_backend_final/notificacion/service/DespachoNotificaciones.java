@@ -2,6 +2,7 @@ package ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.service;
 
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.config.NotificacionProperties;
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.correo.EnviadorCorreo;
+import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.correo.EnviadorCorreoConVariables;
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.correo.EnvioCorreoException;
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.correo.PlantillaAviso;
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.entity.EstadoNotificacion;
@@ -12,6 +13,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import java.time.LocalDate;
+import java.util.Map;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -27,6 +30,16 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 @Service
 public class DespachoNotificaciones {
+
+    /** Entrega un aviso: si el enviador acepta variables (la API de correo) se las pasa; si no, usa la forma simple. */
+    static void entregar(EnviadorCorreo enviador, String destinatario, String asunto, String cuerpo,
+                         String referencia, Map<String, String> variables) {
+        if (enviador instanceof EnviadorCorreoConVariables conVariables) {
+            conVariables.enviar(destinatario, asunto, cuerpo, referencia, variables);
+        } else {
+            enviador.enviar(destinatario, asunto, cuerpo, referencia);
+        }
+    }
 
     public record ResultadoLote(int enviadas, int reintentos, int fallidas) {
         public int total() {
@@ -84,8 +97,10 @@ public class DespachoNotificaciones {
         for (NotificacionRolPago aviso : lote) {
             YearMonth periodo = YearMonth.from(aviso.getPeriodo().getFechaPeriodo());
             try {
-                enviador.enviar(aviso.getEmailDestino(), PlantillaAviso.asunto(periodo),
-                        PlantillaAviso.cuerpo(periodo, propiedades.urlSistema()), "aviso-" + aviso.getId());
+                entregar(enviador, aviso.getEmailDestino(), PlantillaAviso.asunto(periodo),
+                        PlantillaAviso.cuerpo(periodo, propiedades.urlSistema()), "aviso-" + aviso.getId(),
+                        PlantillaAviso.variables(periodo, propiedades.urlSistema(), aviso.getEmailDestino(),
+                                aviso.getId(), LocalDate.now(clock)));
                 guardar(aviso, null);
                 enviadas++;
             } catch (EnvioCorreoException e) {

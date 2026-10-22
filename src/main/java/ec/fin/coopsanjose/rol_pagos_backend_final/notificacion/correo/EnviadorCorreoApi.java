@@ -12,6 +12,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import java.util.LinkedHashMap;
 
 import javax.net.ssl.SSLException;
 import java.net.ConnectException;
@@ -26,7 +27,7 @@ import java.util.Map;
  * {"notifications":[{...}]}. La API acepta el lote y lo procesa después: un 200 significa "aceptado".
  */
 @Slf4j
-public class EnviadorCorreoApi implements EnviadorCorreo {
+public class EnviadorCorreoApi implements EnviadorCorreoConVariables {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -65,6 +66,12 @@ public class EnviadorCorreoApi implements EnviadorCorreo {
 
     @Override
     public void enviar(String destinatario, String asunto, String texto, String referencia) {
+        enviar(destinatario, asunto, texto, referencia, Map.of());
+    }
+
+    @Override
+    public void enviar(String destinatario, String asunto, String texto, String referencia,
+                       Map<String, String> variables) {
         if (!estaConfigurado()) {
             throw new EnvioCorreoException("La API de correo no está configurada", true, null);
         }
@@ -82,7 +89,7 @@ public class EnviadorCorreoApi implements EnviadorCorreo {
                             cabeceras.set(api.cabeceraIdempotencia(), referencia);   // evita duplicados al reintentar
                         }
                     })
-                    .body(new SolicitudEnvio(List.of(armar(destinatario, asunto, texto, referencia))))
+                    .body(new SolicitudEnvio(List.of(armar(destinatario, asunto, texto, referencia, variables))))
                     .retrieve()
                     .body(String.class);
         } catch (RestClientResponseException e) {
@@ -95,16 +102,26 @@ public class EnviadorCorreoApi implements EnviadorCorreo {
         verificarRespuesta(respuesta);
     }
 
-    private Notificacion armar(String destinatario, String asunto, String texto, String referencia) {
+    private Notificacion armar(String destinatario, String asunto, String texto, String referencia,
+                               Map<String, String> variablesDelAviso) {
         boolean redirigido = envio.redirige();
         String para = redirigido ? envio.redirigirA().trim() : destinatario;
         String asuntoFinal = redirigido ? "[PRUEBA] " + asunto : asunto;
         String mensaje = redirigido
                 ? "Mensaje de prueba (" + referencia + "): el destinatario real no recibió este aviso.\n\n" + texto
                 : texto;
-        boolean plantilla = envio.usaPlantilla();
+        Map<String, String> variables = null;
+        if (envio.usaPlantilla()) {
+            Map<String, String> mapa = new LinkedHashMap<>();
+            Map<String, String> origen = variablesDelAviso == null ? Map.of() : variablesDelAviso;
+            // Con redirección, la dirección real del empleado tampoco debe viajar dentro de las variables
+            origen.forEach((nombre, valor) ->
+                    mapa.put(nombre, redirigido && valor != null && valor.equals(destinatario) ? para : valor));
+            mapa.putAll(envio.variables());   // lo fijado en la configuración tiene prioridad
+            variables = mapa;
+        }
         return new Notificacion(envio.canal(), para, asuntoFinal, mensaje,
-                plantilla ? envio.codigoPlantilla().trim() : null, plantilla ? envio.variables() : null);
+                envio.usaPlantilla() ? envio.codigoPlantilla().trim() : null, variables);
     }
 
     /**

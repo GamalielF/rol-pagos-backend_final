@@ -1,0 +1,12 @@
+# Presentación local con correo REAL redirigido a UNA sola dirección. Se activa junto a dev: SPRING_PROFILES_ACTIVE=dev,demo
+# Sin CORREO_API_URL o sin CORREO_REDIRIGIR_A la aplicación no arranca, a propósito.
+app:
+  correo:
+    modo: API
+    api:
+      url: ${CORREO_API_URL}
+      ssl-bundle: ad
+      codigo-plantilla: ${CORREO_CODIGO_PLANTILLA:ACCOUNT_ACTIVATE}
+      redirigir-a: ${CORREO_REDIRIGIR_A}
+  notificaciones:
+    intervalo-ms: 10000
