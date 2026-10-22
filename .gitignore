@@ -42,15 +42,7 @@ build/
 *.key
 VAULT_DEV_ROOT_TOKEN=
 VAULT_PORT=8200
-# Secretos y entorno: NUNCA al repositorio
-.env
-.env.*
-!.env.example
-*.pfx
-*.p12
-*.jks
-*.pem
-*.key
+
 
 # Credenciales generadas por el script de Vault (nunca al repositorio)
 docker/runtime/

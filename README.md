@@ -63,7 +63,7 @@ Para probar que **solo** el JWT abre la puerta (sin el modo B), ejecuta con `-Da
 
 ## 3. Guion de demostración (con Postman)
 
-Importa `roles-pago-demo.postman_collection.json`. En la pestaña **Variables** de la colección ajusta:
+Importa `docs/postman/roles-pago-demo.postman_collection.json`. En la pestaña **Variables** de la colección ajusta:
 `usuarioAdmin` (ya trae `fsepa`), `usuarioRrhh` y `usuarioEmpleado` (códigos AD de dos personas del directorio),
 `cedulaEmpleado` (la cédula de `usuarioEmpleado`) y `periodo` (por ejemplo `2026-09`).
 
