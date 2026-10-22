@@ -1,0 +1,1158 @@
+{
+  "info": {
+    "name": "Roles de Pago - Backend (demostración local)",
+    "description": "Guion de demostración. Ajuste las variables de la colección y ejecute las carpetas en orden. Cada petición verifica su código HTTP esperado.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base",
+      "value": "http://localhost:8080/api/v1/roles-pago"
+    },
+    {
+      "key": "periodo",
+      "value": "2026-09",
+      "description": "yyyy-MM"
+    },
+    {
+      "key": "usuarioAdmin",
+      "value": "fsepa"
+    },
+    {
+      "key": "usuarioRrhh",
+      "value": "CAMBIAR_usuario_rrhh",
+      "description": "Código AD de quien hará de RRHH"
+    },
+    {
+      "key": "usuarioEmpleado",
+      "value": "CAMBIAR_usuario_empleado",
+      "description": "Código AD de quien hará de empleado"
+    },
+    {
+      "key": "cedulaEmpleado",
+      "value": "CAMBIAR_cedula_del_empleado"
+    },
+    {
+      "key": "cedulaAjena",
+      "value": "1712345675",
+      "description": "Una cédula que NO es la del empleado"
+    },
+    {
+      "key": "rolId",
+      "value": "1",
+      "description": "id de un rol del listado"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "description": "Solo si prueba con un token real"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Salud",
+      "item": [
+        {
+          "name": "Salud de la aplicación",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base}}/actuator/health",
+            "description": "Debe responder UP. No necesita sesión."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Sesión",
+      "item": [
+        {
+          "name": "Mi perfil como ADMIN",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioAdmin}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/mi-perfil",
+            "description": "roles incluye ADMIN y EMPLEADO."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mi perfil como RRHH",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioRrhh}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/mi-perfil",
+            "description": "Tras el paso 2 (otorgar RRHH) incluye RRHH."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mi perfil como EMPLEADO",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioEmpleado}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/mi-perfil",
+            "description": "Solo EMPLEADO."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sin sesión (debe rechazar)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base}}/mi-perfil",
+            "description": "Sin cabecera de usuario ni token."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Administración (ADMIN)",
+      "item": [
+        {
+          "name": "Sincronizar el directorio con el AD",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioAdmin}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/admin/directorio/sincronizar",
+            "description": "Llama al AD real; tarda unos segundos."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Estado del directorio",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioAdmin}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/admin/directorio/estado"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Buscar a una persona por cédula",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioAdmin}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/admin/directorio/buscar",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cedula\": \"{{cedulaEmpleado}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar usuarios",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioAdmin}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/admin/usuarios?buscar=&pagina=0&tamano=10"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dar el rol RRHH",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioAdmin}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/admin/usuarios/{{usuarioRrhh}}/roles/RRHH/otorgar",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verRolesAjenos\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "verRolesAjenos=false: RRHH NO podrá ver roles ajenos hasta que un ADMIN se lo conceda."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Usuarios con privilegios",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioAdmin}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/admin/usuarios/privilegiados"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "RRHH intenta entrar a /admin (debe rechazar)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioRrhh}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/admin/usuarios"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. PDFs de demostración (solo perfil dev)",
+      "item": [
+        {
+          "name": "Generar PDFs coherentes con el directorio",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioAdmin}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/prueba/demo/pdfs?periodo={{periodo}}&cantidad=5&usuarios={{usuarioAdmin}},{{usuarioRrhh}},{{usuarioEmpleado}}",
+            "description": "Escribe los PDF en data/demo-pdfs/<periodo>/ (nombre = cédula.pdf), incluyendo a los tres usuarios del guion. No son roles reales."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. RRHH: carga, publicación y avisos",
+      "item": [
+        {
+          "name": "Ver los períodos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioRrhh}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/rrhh/periodos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Carga masiva de roles",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioRrhh}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/rrhh/periodos/{{periodo}}/roles-pago",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivos",
+                  "type": "file",
+                  "src": [],
+                  "description": "Seleccione TODOS los PDF de data/demo-pdfs/<periodo>/ (o sus propios roles: nombre = cédula.pdf)"
+                }
+              ]
+            },
+            "description": "Body > form-data > archivos > Select Files: elija todos los PDF generados."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listado del período (cédulas enmascaradas)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioRrhh}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/rrhh/periodos/{{periodo}}/roles-pago",
+            "description": "Anote el id de un rol y póngalo en la variable rolId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resumen y cuadre (activos vs roles)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioRrhh}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/rrhh/periodos/{{periodo}}/resumen"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publicar el período",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioRrhh}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/rrhh/periodos/{{periodo}}/publicar",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirmarFaltantes\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "confirmarFaltantes=true porque en la demostración no todas las personas tienen rol. Encola un aviso por rol publicado."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Estado de los avisos por correo",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioRrhh}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/rrhh/periodos/{{periodo}}/notificaciones",
+            "description": "Espere unos 30 segundos y repita: PENDIENTE pasa a ENVIADA."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cobertura: quién ya abrió su rol",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioRrhh}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/rrhh/periodos/{{periodo}}/cobertura"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver el rol de otra persona (con motivo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioAdmin}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/rrhh/periodos/{{periodo}}/roles-pago/{{rolId}}/ver",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motivo\": \"Revisión solicitada por el empleado para aclarar un descuento\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Como ADMIN siempre se permite. Como RRHH exige el permiso VER_ROLES_AJENOS. Queda en la auditoría."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Empleado",
+      "item": [
+        {
+          "name": "Períodos publicados disponibles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioEmpleado}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/mi-rol-pago/periodos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar mi rol de pago",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioEmpleado}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/mi-rol-pago/consultar",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cedula\": \"{{cedulaEmpleado}}\",\n  \"periodo\": \"{{periodo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "La respuesta trae el PDF en base64."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Intentar con una cédula ajena (debe rechazar)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioEmpleado}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/mi-rol-pago/consultar",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cedula\": \"{{cedulaAjena}}\",\n  \"periodo\": \"{{periodo}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Queda registrado como intento denegado. Con 5 intentos ajenos en 15 minutos, el siguiente responde 429."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Auditoría (ADMIN)",
+      "item": [
+        {
+          "name": "Accesos a roles de pago",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioAdmin}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/admin/auditoria/accesos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accesos denegados",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioAdmin}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/admin/auditoria/accesos?resultado=DENEGADO"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Acciones de RRHH",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioAdmin}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/admin/auditoria/acciones"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Usuarios con intentos denegados",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioAdmin}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/admin/auditoria/denegados?minimo=1"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Exportar accesos (CSV en base64)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Dev-Usuario",
+                "value": "{{usuarioAdmin}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "disabled": true,
+                "description": "Para probar con un token real: habilitar esta cabecera y deshabilitar X-Dev-Usuario"
+              }
+            ],
+            "url": "{{base}}/admin/auditoria/accesos/exportar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado esperado: 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
