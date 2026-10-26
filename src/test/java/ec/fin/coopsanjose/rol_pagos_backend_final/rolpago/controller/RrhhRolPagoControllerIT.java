@@ -15,8 +15,6 @@ import org.springframework.web.context.WebApplicationContext;
 
 import java.util.List;
 
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -112,14 +110,14 @@ class RrhhRolPagoControllerIT extends SoporteRolesPago {
     // ------------------------------------------------------------ listar, inactivar, activar
 
     @Test
-    void listarMuestraLaCedulaEnmascaradaYNuncaLaCompleta() throws Exception {
+    void listarMuestraLaCedulaCompletaALosQueGestionanLosRoles() throws Exception {
         cargarJuan();
 
         mockMvc.perform(get(BASE).with(como("RRHH")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.roles[0].cedulaEnmascarada").value("17******75"))
-                .andExpect(jsonPath("$.content.roles[0].nombre").value(NOMBRE_JUAN))
-                .andExpect(content().string(not(containsString(CEDULA_JUAN))));
+                .andExpect(jsonPath("$.content.roles[0].cedula").value(CEDULA_JUAN))
+                .andExpect(jsonPath("$.content.roles[0].cedulaEnmascarada").doesNotExist())
+                .andExpect(jsonPath("$.content.roles[0].nombre").value(NOMBRE_JUAN));
     }
 
     @Test

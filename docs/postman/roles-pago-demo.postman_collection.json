@@ -609,7 +609,7 @@
           ]
         },
         {
-          "name": "Listado del período (cédulas enmascaradas)",
+          "name": "Listado del período",
           "request": {
             "method": "GET",
             "header": [

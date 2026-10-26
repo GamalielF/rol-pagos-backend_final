@@ -14,10 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
 import static org.assertj.core.api.Assumptions.assumeThat;
-import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.matchesPattern;
-import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -64,14 +61,14 @@ class AdminDirectorioControllerIT {
     }
 
     @Test
-    void elUsuarioSeConsultaConLaCedulaEnmascarada() throws Exception {
+    void elUsuarioSeConsultaConLaCedulaCompleta() throws Exception {
         requerirDatosDePrueba();
         mockMvc.perform(comoAdmin(post("/admin/directorio/sincronizar"))).andExpect(status().isOk());
 
         mockMvc.perform(comoAdmin(get("/admin/directorio/usuarios/" + usuarioPrueba)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.cedulaEnmascarada").value(matchesPattern("\\d{2}\\*{6}\\d{2}")))
-                .andExpect(content().string(not(containsString(cedulaPrueba))));
+                .andExpect(jsonPath("$.content.cedula").value(cedulaPrueba))
+                .andExpect(jsonPath("$.content.cedulaEnmascarada").doesNotExist());
     }
 
     @Test
@@ -83,7 +80,7 @@ class AdminDirectorioControllerIT {
                         .content("{\"cedula\":\"" + cedulaPrueba + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].username").exists())
-                .andExpect(content().string(not(containsString(cedulaPrueba))));
+                .andExpect(jsonPath("$.content[0].cedula").value(cedulaPrueba));
     }
 
     @Test

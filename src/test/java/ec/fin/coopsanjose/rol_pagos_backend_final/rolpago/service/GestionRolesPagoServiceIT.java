@@ -30,7 +30,7 @@ class GestionRolesPagoServiceIT extends SoporteRolesPago {
     }
 
     @Test
-    void listarMuestraElNombreYLaCedulaEnmascarada() {
+    void listarMuestraElNombreYLaCedulaCompleta() {
         ListadoPeriodoDto listado = gestion.listar(PERIODO);
 
         assertThat(listado.periodo()).isEqualTo("2099-03");
@@ -38,7 +38,7 @@ class GestionRolesPagoServiceIT extends SoporteRolesPago {
         assertThat(listado.activos()).isEqualTo(1);
         assertThat(listado.roles()).hasSize(1);
         RolPagoResumenDto fila = listado.roles().get(0);
-        assertThat(fila.cedulaEnmascarada()).isEqualTo("17******75");
+        assertThat(fila.cedula()).isEqualTo(CEDULA_JUAN);
         assertThat(fila.nombre()).isEqualTo(NOMBRE_JUAN);
         assertThat(listado.toString()).doesNotContain(CEDULA_JUAN);
     }

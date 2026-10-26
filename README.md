@@ -111,7 +111,7 @@ El período se escribe siempre `yyyy-MM`. La cédula nunca viaja en una URL. Los
 - Cerrado por defecto: solo `/actuator/health` y `/error` son públicos.
 - Los roles **no** vienen en el token: salen de la base de datos en cada petición, así que revocar un rol o dar de baja a alguien en el AD tiene efecto inmediato.
 - Se aceptan solo tokens RS256 de sesión; se rechazan el token temporal del paso MFA, los de vida de renovación, los sin firma y los firmados con otra clave. Las cookies se ignoran.
-- Las cédulas salen enmascaradas; los registros no contienen cédulas, tokens ni direcciones de correo.
+- RRHH y ADMIN ven la cédula completa en sus listados (es el identificador con el que cargan los PDF); el perfil propio y la auditoría la muestran enmascarada. Los registros (logs) no contienen cédulas, tokens ni direcciones de correo.
 - Sin borrado físico: todo se inactiva y queda auditado.
 
 ## 7. Pruebas

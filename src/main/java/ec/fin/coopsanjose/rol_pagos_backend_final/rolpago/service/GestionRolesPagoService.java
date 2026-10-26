@@ -85,7 +85,7 @@ public class GestionRolesPagoService {
     }
 
     private RolPagoResumenDto aResumen(RolPago r, Map<String, String> nombres) {
-        return new RolPagoResumenDto(r.getId(), enmascarar(r.getCedula()), nombres.get(r.getCedula()),
+        return new RolPagoResumenDto(r.getId(), r.getCedula(), nombres.get(r.getCedula()),
                 r.getEstadoRegistro().name(), r.getTamanoBytes(), r.getModificadoEn(), r.getModificadoPor());
     }
 
@@ -100,9 +100,5 @@ public class GestionRolesPagoService {
                         .thenComparing(DirectorioAd::getUsernameAd))
                 .forEach(d -> nombres.putIfAbsent(d.getCedula(), d.getNombreCompleto()));
         return nombres;
-    }
-
-    private static String enmascarar(String cedula) {
-        return (cedula == null || cedula.length() != 10) ? null : cedula.substring(0, 2) + "******" + cedula.substring(8);
     }
 }

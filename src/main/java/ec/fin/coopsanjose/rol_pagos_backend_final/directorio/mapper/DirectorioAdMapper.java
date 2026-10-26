@@ -62,10 +62,10 @@ public class DirectorioAdMapper {
                 || actual.getEstadoRegistro() != esperado;
     }
 
-    /** Vista pública de un usuario: la cédula SIEMPRE sale enmascarada. */
+    /** Vista de un usuario para ADMIN: la cédula va completa (el DTO la oculta de toString). */
     public PerfilDirectorioDto aPerfil(DirectorioAd d) {
         return new PerfilDirectorioDto(d.getUsernameAd(), d.getNombreCompleto(), d.getCargo(), d.getEmail(),
-                d.getEstadoRegistro().name(), enmascarar(d.getCedula()));
+                d.getEstadoRegistro().name(), d.getCedula());
     }
 
     private String correo(String username) {
@@ -73,9 +73,6 @@ public class DirectorioAdMapper {
         return (dominio == null || dominio.isBlank()) ? null : username + "@" + dominio.trim();
     }
 
-    private static String enmascarar(String cedula) {
-        return (cedula == null || cedula.length() != 10) ? null : cedula.substring(0, 2) + "******" + cedula.substring(8);
-    }
 
     private static String limpiar(String valor, int maximo) {
         if (valor == null) {

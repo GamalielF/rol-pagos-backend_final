@@ -1,0 +1,242 @@
+diff --git a/README.md b/README.md
+index 59e8fa8..c35e1bf 100644
+--- a/README.md
++++ b/README.md
+@@ -111,7 +111,7 @@ El período se escribe siempre `yyyy-MM`. La cédula nunca viaja en una URL. Los
+ - Cerrado por defecto: solo `/actuator/health` y `/error` son públicos.
+ - Los roles **no** vienen en el token: salen de la base de datos en cada petición, así que revocar un rol o dar de baja a alguien en el AD tiene efecto inmediato.
+ - Se aceptan solo tokens RS256 de sesión; se rechazan el token temporal del paso MFA, los de vida de renovación, los sin firma y los firmados con otra clave. Las cookies se ignoran.
+-- Las cédulas salen enmascaradas; los registros no contienen cédulas, tokens ni direcciones de correo.
++- RRHH y ADMIN ven la cédula completa en sus listados (es el identificador con el que cargan los PDF); el perfil propio y la auditoría la muestran enmascarada. Los registros (logs) no contienen cédulas, tokens ni direcciones de correo.
+ - Sin borrado físico: todo se inactiva y queda auditado.
+ 
+ ## 7. Pruebas
+diff --git a/docs/postman/roles-pago-demo.postman_collection.json b/docs/postman/roles-pago-demo.postman_collection.json
+index 2cededf..4c8807c 100644
+--- a/docs/postman/roles-pago-demo.postman_collection.json
++++ b/docs/postman/roles-pago-demo.postman_collection.json
+@@ -609,7 +609,7 @@
+           ]
+         },
+         {
+-          "name": "Listado del período (cédulas enmascaradas)",
++          "name": "Listado del período",
+           "request": {
+             "method": "GET",
+             "header": [
+diff --git a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/dto/response/PerfilDirectorioDto.java b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/dto/response/PerfilDirectorioDto.java
+index 0c3c126..55ad65e 100644
+--- a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/dto/response/PerfilDirectorioDto.java
++++ b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/dto/response/PerfilDirectorioDto.java
+@@ -1,6 +1,14 @@
+-package ec.fin.coopsanjose.rol_pagos_backend_final.directorio.dto.response;
+-
+-/** Vista de un usuario del directorio. La cédula SIEMPRE sale enmascarada. */
+-public record PerfilDirectorioDto(String username, String nombreCompleto, String cargo, String email,
+-                                  String estado, String cedulaEnmascarada) {
+-}
+\ No newline at end of file
++package ec.fin.coopsanjose.rol_pagos_backend_final.directorio.dto.response;
++
++/**
++ * Vista de un usuario del directorio, solo para ADMIN. La cédula va completa, pero nunca en toString(), para que no
++ * pueda pasar a los registros si alguien imprime el objeto.
++ */
++public record PerfilDirectorioDto(String username, String nombreCompleto, String cargo, String email,
++                                  String estado, String cedula) {
++
++    @Override
++    public String toString() {
++        return "PerfilDirectorioDto[username=" + username + ", estado=" + estado + "]";
++    }
++}
+diff --git a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/mapper/DirectorioAdMapper.java b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/mapper/DirectorioAdMapper.java
+index d898d58..fb5c932 100644
+--- a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/mapper/DirectorioAdMapper.java
++++ b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/mapper/DirectorioAdMapper.java
+@@ -62,20 +62,17 @@ public class DirectorioAdMapper {
+                 || actual.getEstadoRegistro() != esperado;
+     }
+ 
+-    /** Vista pública de un usuario: la cédula SIEMPRE sale enmascarada. */
++    /** Vista de un usuario para ADMIN: la cédula va completa (el DTO la oculta de toString). */
+     public PerfilDirectorioDto aPerfil(DirectorioAd d) {
+         return new PerfilDirectorioDto(d.getUsernameAd(), d.getNombreCompleto(), d.getCargo(), d.getEmail(),
+-                d.getEstadoRegistro().name(), enmascarar(d.getCedula()));
++                d.getEstadoRegistro().name(), d.getCedula());
+     }
+ 
+     private String correo(String username) {
+         String dominio = propiedades.dominioCorreo();
+         return (dominio == null || dominio.isBlank()) ? null : username + "@" + dominio.trim();
+     }
+-
+-    private static String enmascarar(String cedula) {
+-        return (cedula == null || cedula.length() != 10) ? null : cedula.substring(0, 2) + "******" + cedula.substring(8);
+-    }
++
+ 
+     private static String limpiar(String valor, int maximo) {
+         if (valor == null) {
+diff --git a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/dto/response/RolPagoResumenDto.java b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/dto/response/RolPagoResumenDto.java
+index 6ede052..5ecef46 100644
+--- a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/dto/response/RolPagoResumenDto.java
++++ b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/dto/response/RolPagoResumenDto.java
+@@ -2,7 +2,15 @@ package ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response;
+ 
+ import java.time.LocalDateTime;
+ 
+-/** Una fila del listado de RRHH. La cédula SIEMPRE sale enmascarada. */
+-public record RolPagoResumenDto(Long id, String cedulaEnmascarada, String nombre, String estado,
++/**
++ * Una fila del listado de RRHH. Solo llegan aquí RRHH y ADMIN, por eso la cédula va completa; pero nunca aparece
++ * en toString(), para que no pueda pasar a los registros si alguien imprime el objeto.
++ */
++public record RolPagoResumenDto(Long id, String cedula, String nombre, String estado,
+                                 long tamanoBytes, LocalDateTime actualizadoEn, String actualizadoPor) {
++
++    @Override
++    public String toString() {
++        return "RolPagoResumenDto[id=" + id + ", estado=" + estado + ", tamanoBytes=" + tamanoBytes + "]";
++    }
+ }
+diff --git a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoService.java b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoService.java
+index 29d06ab..1aa86da 100644
+--- a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoService.java
++++ b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoService.java
+@@ -85,7 +85,7 @@ public class GestionRolesPagoService {
+     }
+ 
+     private RolPagoResumenDto aResumen(RolPago r, Map<String, String> nombres) {
+-        return new RolPagoResumenDto(r.getId(), enmascarar(r.getCedula()), nombres.get(r.getCedula()),
++        return new RolPagoResumenDto(r.getId(), r.getCedula(), nombres.get(r.getCedula()),
+                 r.getEstadoRegistro().name(), r.getTamanoBytes(), r.getModificadoEn(), r.getModificadoPor());
+     }
+ 
+@@ -101,8 +101,4 @@ public class GestionRolesPagoService {
+                 .forEach(d -> nombres.putIfAbsent(d.getCedula(), d.getNombreCompleto()));
+         return nombres;
+     }
+-
+-    private static String enmascarar(String cedula) {
+-        return (cedula == null || cedula.length() != 10) ? null : cedula.substring(0, 2) + "******" + cedula.substring(8);
+-    }
+ }
+diff --git a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/controller/AdminDirectorioControllerIT.java b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/controller/AdminDirectorioControllerIT.java
+index c8b16e3..b483a25 100644
+--- a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/controller/AdminDirectorioControllerIT.java
++++ b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/controller/AdminDirectorioControllerIT.java
+@@ -14,10 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
+ import org.springframework.web.context.WebApplicationContext;
+ 
+ import static org.assertj.core.api.Assumptions.assumeThat;
+-import static org.hamcrest.Matchers.containsString;
+ import static org.hamcrest.Matchers.greaterThan;
+-import static org.hamcrest.Matchers.matchesPattern;
+-import static org.hamcrest.Matchers.not;
+ import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+@@ -64,14 +61,14 @@ class AdminDirectorioControllerIT {
+     }
+ 
+     @Test
+-    void elUsuarioSeConsultaConLaCedulaEnmascarada() throws Exception {
++    void elUsuarioSeConsultaConLaCedulaCompleta() throws Exception {
+         requerirDatosDePrueba();
+         mockMvc.perform(comoAdmin(post("/admin/directorio/sincronizar"))).andExpect(status().isOk());
+ 
+         mockMvc.perform(comoAdmin(get("/admin/directorio/usuarios/" + usuarioPrueba)))
+                 .andExpect(status().isOk())
+-                .andExpect(jsonPath("$.content.cedulaEnmascarada").value(matchesPattern("\\d{2}\\*{6}\\d{2}")))
+-                .andExpect(content().string(not(containsString(cedulaPrueba))));
++                .andExpect(jsonPath("$.content.cedula").value(cedulaPrueba))
++                .andExpect(jsonPath("$.content.cedulaEnmascarada").doesNotExist());
+     }
+ 
+     @Test
+@@ -83,7 +80,7 @@ class AdminDirectorioControllerIT {
+                         .content("{\"cedula\":\"" + cedulaPrueba + "\"}"))
+                 .andExpect(status().isOk())
+                 .andExpect(jsonPath("$.content[0].username").exists())
+-                .andExpect(content().string(not(containsString(cedulaPrueba))));
++                .andExpect(jsonPath("$.content[0].cedula").value(cedulaPrueba));
+     }
+ 
+     @Test
+diff --git a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/mapper/DirectorioAdMapperTest.java b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/mapper/DirectorioAdMapperTest.java
+index e8a0ade..8723713 100644
+--- a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/mapper/DirectorioAdMapperTest.java
++++ b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/directorio/mapper/DirectorioAdMapperTest.java
+@@ -92,14 +92,14 @@ class DirectorioAdMapperTest {
+     }
+ 
+     @Test
+-    void elPerfilNuncaExponeLaCedulaCompleta() {
++    void elPerfilTraeLaCedulaCompletaPeroNuncaEnToString() {
+         DirectorioAd d = new DirectorioAd();
+         d.setUsernameAd("jperez");
+         d.setCedula("1712345675");
+ 
+         PerfilDirectorioDto perfil = mapper.aPerfil(d);
+ 
+-        assertThat(perfil.cedulaEnmascarada()).isEqualTo("17******75");
++        assertThat(perfil.cedula()).isEqualTo("1712345675");
+         assertThat(perfil.toString()).doesNotContain("1712345675");
+     }
+ }
+\ No newline at end of file
+diff --git a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/controller/RrhhRolPagoControllerIT.java b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/controller/RrhhRolPagoControllerIT.java
+index 2c03a41..c85cb5f 100644
+--- a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/controller/RrhhRolPagoControllerIT.java
++++ b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/controller/RrhhRolPagoControllerIT.java
+@@ -15,8 +15,6 @@ import org.springframework.web.context.WebApplicationContext;
+ 
+ import java.util.List;
+ 
+-import static org.hamcrest.Matchers.containsString;
+-import static org.hamcrest.Matchers.not;
+ import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+@@ -112,14 +110,14 @@ class RrhhRolPagoControllerIT extends SoporteRolesPago {
+     // ------------------------------------------------------------ listar, inactivar, activar
+ 
+     @Test
+-    void listarMuestraLaCedulaEnmascaradaYNuncaLaCompleta() throws Exception {
++    void listarMuestraLaCedulaCompletaALosQueGestionanLosRoles() throws Exception {
+         cargarJuan();
+ 
+         mockMvc.perform(get(BASE).with(como("RRHH")))
+                 .andExpect(status().isOk())
+-                .andExpect(jsonPath("$.content.roles[0].cedulaEnmascarada").value("17******75"))
+-                .andExpect(jsonPath("$.content.roles[0].nombre").value(NOMBRE_JUAN))
+-                .andExpect(content().string(not(containsString(CEDULA_JUAN))));
++                .andExpect(jsonPath("$.content.roles[0].cedula").value(CEDULA_JUAN))
++                .andExpect(jsonPath("$.content.roles[0].cedulaEnmascarada").doesNotExist())
++                .andExpect(jsonPath("$.content.roles[0].nombre").value(NOMBRE_JUAN));
+     }
+ 
+     @Test
+diff --git a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoServiceIT.java b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoServiceIT.java
+index 504761d..6fb48d8 100644
+--- a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoServiceIT.java
++++ b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoServiceIT.java
+@@ -30,7 +30,7 @@ class GestionRolesPagoServiceIT extends SoporteRolesPago {
+     }
+ 
+     @Test
+-    void listarMuestraElNombreYLaCedulaEnmascarada() {
++    void listarMuestraElNombreYLaCedulaCompleta() {
+         ListadoPeriodoDto listado = gestion.listar(PERIODO);
+ 
+         assertThat(listado.periodo()).isEqualTo("2099-03");
+@@ -38,7 +38,7 @@ class GestionRolesPagoServiceIT extends SoporteRolesPago {
+         assertThat(listado.activos()).isEqualTo(1);
+         assertThat(listado.roles()).hasSize(1);
+         RolPagoResumenDto fila = listado.roles().get(0);
+-        assertThat(fila.cedulaEnmascarada()).isEqualTo("17******75");
++        assertThat(fila.cedula()).isEqualTo(CEDULA_JUAN);
+         assertThat(fila.nombre()).isEqualTo(NOMBRE_JUAN);
+         assertThat(listado.toString()).doesNotContain(CEDULA_JUAN);
+     }

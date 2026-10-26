@@ -92,14 +92,14 @@ class DirectorioAdMapperTest {
     }
 
     @Test
-    void elPerfilNuncaExponeLaCedulaCompleta() {
+    void elPerfilTraeLaCedulaCompletaPeroNuncaEnToString() {
         DirectorioAd d = new DirectorioAd();
         d.setUsernameAd("jperez");
         d.setCedula("1712345675");
 
         PerfilDirectorioDto perfil = mapper.aPerfil(d);
 
-        assertThat(perfil.cedulaEnmascarada()).isEqualTo("17******75");
+        assertThat(perfil.cedula()).isEqualTo("1712345675");
         assertThat(perfil.toString()).doesNotContain("1712345675");
     }
 }
