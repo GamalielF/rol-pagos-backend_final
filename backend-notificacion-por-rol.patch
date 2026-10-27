@@ -1,0 +1,215 @@
+diff --git a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/dto/response/NotificacionRolDto.java b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/dto/response/NotificacionRolDto.java
+new file mode 100644
+index 0000000..6b8772f
+--- /dev/null
++++ b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/dto/response/NotificacionRolDto.java
+@@ -0,0 +1,12 @@
++package ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response;
++
++import java.time.LocalDateTime;
++
++/**
++ * Cómo va el aviso por correo de un rol. estado: PENDIENTE (en cola o esperando un reintento), ENVIADA (aceptada por la
++ * API de correo), FALLIDA (agotó los intentos o el fallo no tiene remedio) u OMITIDA (la persona no tiene cuenta con correo).
++ * El error es una categoría del fallo, sin datos personales.
++ */
++public record NotificacionRolDto(String estado, int intentos, LocalDateTime enviadaEn, LocalDateTime proximoIntento,
++                                 String ultimoError) {
++}
+diff --git a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/dto/response/RolPagoResumenDto.java b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/dto/response/RolPagoResumenDto.java
+index 5ecef46..8b0ca20 100644
+--- a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/dto/response/RolPagoResumenDto.java
++++ b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/dto/response/RolPagoResumenDto.java
+@@ -3,11 +3,12 @@ package ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response;
+ import java.time.LocalDateTime;
+ 
+ /**
+- * Una fila del listado de RRHH. Solo llegan aquí RRHH y ADMIN, por eso la cédula va completa; pero nunca aparece
++ * Una fila del listado de RRHH. La notificación es null mientras no exista un aviso para ese rol (por ejemplo, antes de publicar). Solo llegan aquí RRHH y ADMIN, por eso la cédula va completa; pero nunca aparece
+  * en toString(), para que no pueda pasar a los registros si alguien imprime el objeto.
+  */
+ public record RolPagoResumenDto(Long id, String cedula, String nombre, String estado,
+-                                long tamanoBytes, LocalDateTime actualizadoEn, String actualizadoPor) {
++                                long tamanoBytes, LocalDateTime actualizadoEn, String actualizadoPor,
++                                NotificacionRolDto notificacion) {
+ 
+     @Override
+     public String toString() {
+diff --git a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoService.java b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoService.java
+index 1aa86da..74d5a65 100644
+--- a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoService.java
++++ b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoService.java
+@@ -10,7 +10,10 @@ import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.Periodo;
+ import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.PeriodoRepository;
+ import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.entity.DirectorioAd;
+ import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.repository.DirectorioAdRepository;
++import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.entity.NotificacionRolPago;
++import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.repository.NotificacionRolPagoRepository;
+ import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.ListadoPeriodoDto;
++import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.NotificacionRolDto;
+ import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.RolPagoResumenDto;
+ import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.entity.RolPago;
+ import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.repository.RolPagoRepository;
+@@ -25,6 +28,8 @@ import java.util.Comparator;
+ import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
++import java.util.function.Function;
++import java.util.stream.Collectors;
+ 
+ /** Lo que RRHH hace con los roles ya cargados: verlos en lista y retirarlos o reponerlos antes de publicar. */
+ @Service
+@@ -34,6 +39,7 @@ public class GestionRolesPagoService {
+     private final PeriodoRepository periodoRepository;
+     private final RolPagoRepository rolPagoRepository;
+     private final DirectorioAdRepository directorioRepository;
++    private final NotificacionRolPagoRepository notificaciones;
+     private final AuditoriaAccionesService auditoria;
+ 
+     @Transactional(readOnly = true)
+@@ -43,9 +49,12 @@ public class GestionRolesPagoService {
+         List<RolPago> roles = rolPagoRepository.findByPeriodo_IdOrderByCedulaAsc(periodo.getId());
+         Map<String, String> nombres = nombresPorCedula(roles.stream().map(RolPago::getCedula).toList());
+ 
++        Map<String, NotificacionRolPago> avisos = notificaciones.findByPeriodo_Id(periodo.getId()).stream()
++                .collect(Collectors.toMap(NotificacionRolPago::getCedula, Function.identity(), (primero, segundo) -> primero));
++
+         long activos = roles.stream().filter(r -> r.getEstadoRegistro() == EstadoRegistro.ACTIVO).count();
+         return new ListadoPeriodoDto(ym.toString(), periodo.getEstadoPeriodo().name(), activos,
+-                roles.size() - activos, roles.stream().map(r -> aResumen(r, nombres)).toList());
++                roles.size() - activos, roles.stream().map(r -> aResumen(r, nombres, avisos.get(r.getCedula()))).toList());
+     }
+ 
+     @Transactional
+@@ -81,12 +90,19 @@ public class GestionRolesPagoService {
+     }
+ 
+     private RolPagoResumenDto resumen(RolPago rol) {
+-        return aResumen(rol, nombresPorCedula(List.of(rol.getCedula())));
++        return aResumen(rol, nombresPorCedula(List.of(rol.getCedula())), null);
+     }
+ 
+-    private RolPagoResumenDto aResumen(RolPago r, Map<String, String> nombres) {
++    private RolPagoResumenDto aResumen(RolPago r, Map<String, String> nombres, NotificacionRolPago aviso) {
+         return new RolPagoResumenDto(r.getId(), r.getCedula(), nombres.get(r.getCedula()),
+-                r.getEstadoRegistro().name(), r.getTamanoBytes(), r.getModificadoEn(), r.getModificadoPor());
++                r.getEstadoRegistro().name(), r.getTamanoBytes(), r.getModificadoEn(), r.getModificadoPor(),
++                notificacionDe(aviso));
++    }
++
++    private static NotificacionRolDto notificacionDe(NotificacionRolPago aviso) {
++        return aviso == null ? null
++                : new NotificacionRolDto(aviso.getEstado().name(), aviso.getIntentos(), aviso.getEnviadaEn(),
++                aviso.getProximoIntento(), aviso.getUltimoError());
+     }
+ 
+     /** Un nombre por cédula: el de un registro ACTIVO si lo hay (las cédulas con varios códigos comparten persona). */
+diff --git a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/controller/RrhhRolPagoControllerIT.java b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/controller/RrhhRolPagoControllerIT.java
+index c85cb5f..db700e6 100644
+--- a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/controller/RrhhRolPagoControllerIT.java
++++ b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/controller/RrhhRolPagoControllerIT.java
+@@ -117,6 +117,7 @@ class RrhhRolPagoControllerIT extends SoporteRolesPago {
+                 .andExpect(status().isOk())
+                 .andExpect(jsonPath("$.content.roles[0].cedula").value(CEDULA_JUAN))
+                 .andExpect(jsonPath("$.content.roles[0].cedulaEnmascarada").doesNotExist())
++                .andExpect(jsonPath("$.content.roles[0].notificacion").value(org.hamcrest.Matchers.nullValue()))
+                 .andExpect(jsonPath("$.content.roles[0].nombre").value(NOMBRE_JUAN));
+     }
+ 
+diff --git a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoServiceIT.java b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoServiceIT.java
+index 6fb48d8..6057921 100644
+--- a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoServiceIT.java
++++ b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/rolpago/service/GestionRolesPagoServiceIT.java
+@@ -8,6 +8,11 @@ import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.client.DirectorioAd
+ import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.SoporteRolesPago;
+ import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.ListadoPeriodoDto;
+ import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.RolPagoResumenDto;
++import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.entity.EstadoNotificacion;
++import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.entity.NotificacionRolPago;
++import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.repository.NotificacionRolPagoRepository;
++import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.NotificacionRolDto;
++import java.time.LocalDateTime;
+ import org.junit.jupiter.api.BeforeEach;
+ import org.junit.jupiter.api.Test;
+ import org.springframework.beans.factory.annotation.Autowired;
+@@ -22,6 +27,7 @@ class GestionRolesPagoServiceIT extends SoporteRolesPago {
+ 
+     @MockitoBean private DirectorioAdClient cliente;
+     @Autowired private GestionRolesPagoService gestion;
++    @Autowired private NotificacionRolPagoRepository avisos;
+ 
+     @BeforeEach
+     void unRolCargado() {
+@@ -78,4 +84,72 @@ class GestionRolesPagoServiceIT extends SoporteRolesPago {
+         assertThatThrownBy(() -> gestion.listar(YearMonth.of(2098, 1)))
+                 .isInstanceOf(RecursoNoEncontradoException.class);
+     }
++
++    private NotificacionRolPago avisoDe(String cedula, EstadoNotificacion estado) {
++        NotificacionRolPago aviso = new NotificacionRolPago();
++        aviso.setPeriodo(periodoRepository.findByFechaPeriodo(PERIODO.atDay(1)).orElseThrow());
++        aviso.setRolPagoId(rolDe(cedula).getId());
++        aviso.setCedula(cedula);
++        aviso.setUsernameDestino("jperez");
++        aviso.setEmailDestino("jperez@coopsanjose.fin.ec");
++        aviso.setEstado(estado);
++        return aviso;
++    }
++
++    private RolPagoResumenDto filaDe(String cedula) {
++        return gestion.listar(PERIODO).roles().stream().filter(f -> cedula.equals(f.cedula())).findFirst().orElseThrow();
++    }
++
++    @Test
++    void unRolSinAvisoMuestraLaNotificacionVacia() {
++        assertThat(filaDe(CEDULA_JUAN).notificacion()).isNull();
++    }
++
++    @Test
++    void elListadoTraeElEstadoDelAvisoDeCadaRolYNoMezclaLosDeOtros() {
++        persona("mgomez", CEDULA_MARIA, NOMBRE_MARIA, true);
++        cargarUno(CEDULA_MARIA + ".pdf", rol(MES_PERIODO, NOMBRE_MARIA));
++        NotificacionRolPago enviado = avisoDe(CEDULA_JUAN, EstadoNotificacion.ENVIADA);
++        enviado.setIntentos(1);
++        enviado.setEnviadaEn(LocalDateTime.of(2099, 3, 2, 10, 15));
++        avisos.save(enviado);
++
++        NotificacionRolDto deJuan = filaDe(CEDULA_JUAN).notificacion();
++        assertThat(deJuan).isNotNull();
++        assertThat(deJuan.estado()).isEqualTo("ENVIADA");
++        assertThat(deJuan.intentos()).isEqualTo(1);
++        assertThat(deJuan.enviadaEn()).isEqualTo(LocalDateTime.of(2099, 3, 2, 10, 15));
++        assertThat(filaDe(CEDULA_MARIA).notificacion()).isNull();
++    }
++
++    @Test
++    void unAvisoFallidoTraeElMotivoDelError() {
++        NotificacionRolPago fallido = avisoDe(CEDULA_JUAN, EstadoNotificacion.FALLIDA);
++        fallido.setIntentos(5);
++        fallido.setUltimoError("La API de correo no respondio a tiempo");
++        avisos.save(fallido);
++
++        NotificacionRolDto notificacion = filaDe(CEDULA_JUAN).notificacion();
++        assertThat(notificacion.estado()).isEqualTo("FALLIDA");
++        assertThat(notificacion.intentos()).isEqualTo(5);
++        assertThat(notificacion.ultimoError()).isEqualTo("La API de correo no respondio a tiempo");
++        assertThat(notificacion.enviadaEn()).isNull();
++    }
++
++    @Test
++    void unAvisoPendienteEnReintentoTraeCuandoSeVolveraAIntentar() {
++        NotificacionRolPago pendiente = avisoDe(CEDULA_JUAN, EstadoNotificacion.PENDIENTE);
++        pendiente.setIntentos(2);
++        pendiente.setProximoIntento(LocalDateTime.of(2099, 3, 2, 10, 20));
++        avisos.save(pendiente);
++
++        NotificacionRolDto notificacion = filaDe(CEDULA_JUAN).notificacion();
++        assertThat(notificacion.estado()).isEqualTo("PENDIENTE");
++        assertThat(notificacion.proximoIntento()).isEqualTo(LocalDateTime.of(2099, 3, 2, 10, 20));
++    }
++
++    @Test
++    void laRespuestaDeInactivarNoTraeNotificacion() {
++        assertThat(gestion.inactivar(PERIODO, rolDe(CEDULA_JUAN).getId()).notificacion()).isNull();
++    }
+ }

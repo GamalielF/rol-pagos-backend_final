@@ -25,7 +25,7 @@ errores 400, 403, 404, 409 y 429 está redactado para mostrarse tal cual al usua
 | Período | `yyyy-MM` | `2026-09` |
 | Fecha | `yyyy-MM-dd` | `2026-10-22` |
 | Fecha y hora | ISO-8601 sin zona, hora de Ecuador | `2026-10-22T16:53:39` |
-| Cédula | 10 dígitos. **Nunca va en una URL**; en las respuestas sale enmascarada | `17******75` |
+| Cédula | 10 dígitos. **Nunca va en una URL**. RRHH y ADMIN la reciben **completa** en sus listados (campo `cedula`); el perfil propio y la auditoría la reciben enmascarada (`cedulaEnmascarada`, `17******75`) | `1712345675` |
 | Archivos (PDF, CSV) | Base64 dentro del JSON (`contenidoBase64`) | |
 
 **Paginación.** Parámetros `pagina` (base 0, por defecto 0) y `tamano` (por defecto 50). La respuesta es:
@@ -100,14 +100,14 @@ El `{periodo}` es `yyyy-MM`; `{id}` es el `id` del `RolPagoResumenResponse`.
 |---|---|---|
 | `GET /admin/usuarios` | `buscar` (texto opcional), `pagina`, `tamano` | `PaginaResponse<UsuarioAdminResponse>` |
 | `GET /admin/usuarios/privilegiados` | — | `UsuarioAdminResponse[]` (quienes tienen ADMIN o RRHH) |
-| `POST /admin/usuarios/{username}/roles/{rol}/otorgar` | `{rol}` es `ADMIN` o `RRHH`; opcional `{ "verRolesAjenos": false }` | `UsuarioAdminResponse` |
+| `POST /admin/usuarios/{username}/roles/{rol}/otorgar` | `{rol}` es `ADMIN` o `RRHH`; opcional `{ "verRolesAjenos": true/false }` (solo RRHH). **Si no se envía, vale `true`.** Es idempotente: volver a otorgar con otro valor actualiza el permiso | `UsuarioAdminResponse` |
 | `POST /admin/usuarios/{username}/roles/{rol}/revocar` | — | `UsuarioAdminResponse` |
 | `POST /admin/directorio/sincronizar` | — | `ResultadoSincronizacionResponse` (llama al AD; puede tardar unos segundos) |
 | `GET /admin/directorio/estado` | — | `EstadoDirectorioResponse` |
 | `POST /admin/directorio/buscar` | `{ "cedula": "…" }` | `PerfilDirectorioResponse[]` (una cédula puede tener varias cuentas) |
 | `GET /admin/directorio/usuarios/{username}` | — | `PerfilDirectorioResponse` |
 
-Todo usuario activo del AD es `EMPLEADO` sin necesidad de asignarlo. Los administradores de arranque (`fsepa`, `msavala`) no se pueden revocar desde la API.
+Todo usuario activo del AD es `EMPLEADO` sin necesidad de asignarlo. `GET /admin/usuarios` lista solo usuarios **activos** del directorio (`tamano` máximo 200); `privilegiados` incluye también a los dados de baja. El campo `origen` de cada rol es `CONFIGURACION` (administrador de arranque) o `ASIGNADO`; `estadoDirectorio` es `ACTIVO`, `INACTIVO` o `NO_EXISTE`. Reglas que responden 409: asignar a un usuario inactivo, hacer ADMIN a un administrador de arranque, revocar a un administrador de arranque, y quitarse uno mismo el rol ADMIN. Los administradores de arranque (`fsepa`, `msavala`) no se pueden revocar desde la API.
 
 ## 6. Auditoría (rol `ADMIN`)
 

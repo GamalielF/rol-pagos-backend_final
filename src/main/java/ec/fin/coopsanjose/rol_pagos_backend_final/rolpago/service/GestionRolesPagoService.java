@@ -10,7 +10,10 @@ import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.Periodo;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.PeriodoRepository;
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.entity.DirectorioAd;
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.repository.DirectorioAdRepository;
+import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.entity.NotificacionRolPago;
+import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.repository.NotificacionRolPagoRepository;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.ListadoPeriodoDto;
+import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.NotificacionRolDto;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.RolPagoResumenDto;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.entity.RolPago;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.repository.RolPagoRepository;
@@ -25,6 +28,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /** Lo que RRHH hace con los roles ya cargados: verlos en lista y retirarlos o reponerlos antes de publicar. */
 @Service
@@ -34,6 +39,7 @@ public class GestionRolesPagoService {
     private final PeriodoRepository periodoRepository;
     private final RolPagoRepository rolPagoRepository;
     private final DirectorioAdRepository directorioRepository;
+    private final NotificacionRolPagoRepository notificaciones;
     private final AuditoriaAccionesService auditoria;
 
     @Transactional(readOnly = true)
@@ -43,9 +49,12 @@ public class GestionRolesPagoService {
         List<RolPago> roles = rolPagoRepository.findByPeriodo_IdOrderByCedulaAsc(periodo.getId());
         Map<String, String> nombres = nombresPorCedula(roles.stream().map(RolPago::getCedula).toList());
 
+        Map<String, NotificacionRolPago> avisos = notificaciones.findByPeriodo_Id(periodo.getId()).stream()
+                .collect(Collectors.toMap(NotificacionRolPago::getCedula, Function.identity(), (primero, segundo) -> primero));
+
         long activos = roles.stream().filter(r -> r.getEstadoRegistro() == EstadoRegistro.ACTIVO).count();
         return new ListadoPeriodoDto(ym.toString(), periodo.getEstadoPeriodo().name(), activos,
-                roles.size() - activos, roles.stream().map(r -> aResumen(r, nombres)).toList());
+                roles.size() - activos, roles.stream().map(r -> aResumen(r, nombres, avisos.get(r.getCedula()))).toList());
     }
 
     @Transactional
@@ -81,12 +90,19 @@ public class GestionRolesPagoService {
     }
 
     private RolPagoResumenDto resumen(RolPago rol) {
-        return aResumen(rol, nombresPorCedula(List.of(rol.getCedula())));
+        return aResumen(rol, nombresPorCedula(List.of(rol.getCedula())), null);
     }
 
-    private RolPagoResumenDto aResumen(RolPago r, Map<String, String> nombres) {
+    private RolPagoResumenDto aResumen(RolPago r, Map<String, String> nombres, NotificacionRolPago aviso) {
         return new RolPagoResumenDto(r.getId(), r.getCedula(), nombres.get(r.getCedula()),
-                r.getEstadoRegistro().name(), r.getTamanoBytes(), r.getModificadoEn(), r.getModificadoPor());
+                r.getEstadoRegistro().name(), r.getTamanoBytes(), r.getModificadoEn(), r.getModificadoPor(),
+                notificacionDe(aviso));
+    }
+
+    private static NotificacionRolDto notificacionDe(NotificacionRolPago aviso) {
+        return aviso == null ? null
+                : new NotificacionRolDto(aviso.getEstado().name(), aviso.getIntentos(), aviso.getEnviadaEn(),
+                aviso.getProximoIntento(), aviso.getUltimoError());
     }
 
     /** Un nombre por cédula: el de un registro ACTIVO si lo hay (las cédulas con varios códigos comparten persona). */

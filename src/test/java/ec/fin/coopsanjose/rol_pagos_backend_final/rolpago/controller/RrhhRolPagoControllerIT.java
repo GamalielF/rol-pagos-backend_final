@@ -117,6 +117,7 @@ class RrhhRolPagoControllerIT extends SoporteRolesPago {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.roles[0].cedula").value(CEDULA_JUAN))
                 .andExpect(jsonPath("$.content.roles[0].cedulaEnmascarada").doesNotExist())
+                .andExpect(jsonPath("$.content.roles[0].notificacion").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.content.roles[0].nombre").value(NOMBRE_JUAN));
     }
 

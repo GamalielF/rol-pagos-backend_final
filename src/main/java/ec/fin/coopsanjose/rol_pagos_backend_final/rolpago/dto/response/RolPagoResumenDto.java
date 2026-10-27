@@ -3,11 +3,12 @@ package ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response;
 import java.time.LocalDateTime;
 
 /**
- * Una fila del listado de RRHH. Solo llegan aquí RRHH y ADMIN, por eso la cédula va completa; pero nunca aparece
+ * Una fila del listado de RRHH. La notificación es null mientras no exista un aviso para ese rol (por ejemplo, antes de publicar). Solo llegan aquí RRHH y ADMIN, por eso la cédula va completa; pero nunca aparece
  * en toString(), para que no pueda pasar a los registros si alguien imprime el objeto.
  */
 public record RolPagoResumenDto(Long id, String cedula, String nombre, String estado,
-                                long tamanoBytes, LocalDateTime actualizadoEn, String actualizadoPor) {
+                                long tamanoBytes, LocalDateTime actualizadoEn, String actualizadoPor,
+                                NotificacionRolDto notificacion) {
 
     @Override
     public String toString() {
