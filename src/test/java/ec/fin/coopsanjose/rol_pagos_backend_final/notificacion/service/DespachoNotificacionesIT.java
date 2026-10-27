@@ -65,6 +65,21 @@ class DespachoNotificacionesIT extends SoporteNotificaciones {
     }
 
     @Test
+    void unErrorInesperadoDelEnviadorQuedaAnotadoEnElAvisoYNoLoDejaPendienteEnSilencio() {
+        doThrow(new IllegalStateException("fallo raro")).when(enviador).enviar(any(), any(), any(), any());
+
+        ResultadoLote resultado = despacho.despacharLote();
+
+        assertThat(resultado.reintentos()).isEqualTo(1);
+        NotificacionRolPago primero = elPrimeroEnSalir();
+        assertThat(primero.getEstado()).isEqualTo(EstadoNotificacion.PENDIENTE);
+        assertThat(primero.getIntentos()).isEqualTo(1);
+        assertThat(primero.getUltimoError()).contains("IllegalStateException");
+        assertThat(primero.getProximoIntento()).isAfter(LocalDateTime.now(clock));
+        assertThat(avisos().stream().filter(a -> a.getIntentos() == 0)).hasSize(2);   // el lote se detuvo
+    }
+
+    @Test
     void sinElServicioConfiguradoLosAvisosEsperanIntactos() {
         when(enviador.estaConfigurado()).thenReturn(false);
 

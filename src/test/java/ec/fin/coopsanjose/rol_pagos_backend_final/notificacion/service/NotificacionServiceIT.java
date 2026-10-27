@@ -21,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.when;
 
 class NotificacionServiceIT extends SoporteNotificaciones {
 
@@ -175,6 +176,20 @@ class NotificacionServiceIT extends SoporteNotificaciones {
                 .containsExactly(NOMBRE_MARIA, NOMBRE_LUIS);
         assertThat(informe.problemas()).extracting(ProblemaNotificacionDto::estado).containsExactly("FALLIDA", "OMITIDA");
         assertThat(informe.toString()).doesNotContain("@").doesNotContain(CEDULA_MARIA).doesNotContain(CEDULA_LUIS);
+    }
+
+    @Test
+    void elInformeDiceSiElEnvioEstaListoParaQueNoSeConfundaUnAvisoQueEsperaConUnoQueFalla() {
+        escenarioConUnFallidoYUnOmitido();
+
+        when(enviador.estaConfigurado()).thenReturn(false);
+        InformeNotificacionesDto sinConfigurar = notificaciones.informe(PERIODO);
+        assertThat(sinConfigurar.envioConfigurado()).isFalse();
+        assertThat(sinConfigurar.despachoAutomatico()).isFalse();   // la base de las pruebas lo apaga (SoporteRolesPago)
+        assertThat(sinConfigurar.modoCorreo()).isIn("API", "SIMULADO");
+
+        when(enviador.estaConfigurado()).thenReturn(true);
+        assertThat(notificaciones.informe(PERIODO).envioConfigurado()).isTrue();
     }
 
     @Test

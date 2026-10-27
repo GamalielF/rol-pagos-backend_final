@@ -95,6 +95,45 @@ class EnviadorCorreoApiFormatoTest {
     }
 
     @Test
+    void conUnaUrlMalEscritaElMensajeDiceQueTieneMalSinRepetirlaYNoLlamaALaApi() {
+        EnviadorCorreoApi enviador = new EnviadorCorreoApi(new CorreoProperties.Api("\"https://correo.secreto.test/api?k=ABC\"", "secreto", "Authorization", "Bearer", null,
+                Duration.ofSeconds(5), Duration.ofSeconds(15), null), RestClient.builder().build(), EnvioCorreoProperties.SIN_AJUSTES);
+
+        assertThatThrownBy(() -> enviador.enviar(DESTINO, "Asunto", "Texto", "aviso-7"))
+                .isInstanceOfSatisfying(EnvioCorreoException.class, e -> {
+                    assertThat(e.getMessage()).contains("comillas").doesNotContain("secreto").doesNotContain("ABC");
+                    assertThat(e.esReintentable()).isTrue();
+                });
+    }
+
+    @Test
+    void conUnTokenConSaltoDeLineaElMensajeLoSeñalaSinRepetirlo() {
+        EnviadorCorreoApi enviador = new EnviadorCorreoApi(new CorreoProperties.Api(URL, "clave-privada\n", "Authorization", "Bearer", null,
+                Duration.ofSeconds(5), Duration.ofSeconds(15), null), RestClient.builder().build(), EnvioCorreoProperties.SIN_AJUSTES);
+
+        assertThatThrownBy(() -> enviador.enviar(DESTINO, "Asunto", "Texto", "aviso-7"))
+                .isInstanceOfSatisfying(EnvioCorreoException.class,
+                        e -> assertThat(e.getMessage()).contains("token").contains("caracteres no permitidos").doesNotContain("clave-privada"));
+    }
+
+    @Test
+    void unErrorInesperadoAlPrepararElEnvioSeConvierteEnUnFalloVisibleYReintentable() {
+        RestClient quebrado = RestClient.builder()
+                .requestFactory((uri, metodo) -> {
+                    throw new IllegalStateException("fallo raro con datos internos");
+                })
+                .build();
+        EnviadorCorreoApi enviador = new EnviadorCorreoApi(new CorreoProperties.Api(URL, "secreto", "Authorization", "Bearer", null,
+                Duration.ofSeconds(5), Duration.ofSeconds(15), null), quebrado, EnvioCorreoProperties.SIN_AJUSTES);
+
+        assertThatThrownBy(() -> enviador.enviar(DESTINO, "Asunto", "Texto", "aviso-7"))
+                .isInstanceOfSatisfying(EnvioCorreoException.class, e -> {
+                    assertThat(e.esReintentable()).isTrue();
+                    assertThat(e.getMessage()).doesNotContain("datos internos");
+                });
+    }
+
+    @Test
     void unaRespuestaConSuccessFalseSeMarcaParaReintentar() {
         servidor.expect(requestTo(URL)).andRespond(withSuccess("{\"success\":false}", MediaType.APPLICATION_JSON));
         assertThatThrownBy(() -> enviar(enviador(EnvioCorreoProperties.SIN_AJUSTES)))

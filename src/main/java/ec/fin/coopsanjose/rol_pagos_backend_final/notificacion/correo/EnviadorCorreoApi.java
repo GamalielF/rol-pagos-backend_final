@@ -75,6 +75,13 @@ public class EnviadorCorreoApi implements EnviadorCorreoConVariables {
         if (!estaConfigurado()) {
             throw new EnvioCorreoException("La API de correo no está configurada", true, null);
         }
+        String problema = ValidadorConfiguracionCorreo.problemaDeUrl(api.url());
+        if (problema == null) {
+            problema = ValidadorConfiguracionCorreo.problemaDeToken(api.token());
+        }
+        if (problema != null) {
+            throw new EnvioCorreoException(problema, true, null);
+        }
         String respuesta;
         try {
             respuesta = restClient.post()
@@ -98,6 +105,11 @@ public class EnviadorCorreoApi implements EnviadorCorreoConVariables {
             throw clasificarRed(e);
         } catch (RestClientException e) {
             throw new EnvioCorreoException("La API de correo respondió de forma inesperada", true, e);
+        } catch (EnvioCorreoException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw new EnvioCorreoException("No se pudo preparar el envío (" + e.getClass().getSimpleName()
+                    + "): revise la URL y la configuración de la API de correo", true, e);
         }
         verificarRespuesta(respuesta);
     }

@@ -5,5 +5,6 @@ import java.util.List;
 /** reintentando = avisos que ya fallaron alguna vez y esperan su siguiente intento. */
 public record InformeNotificacionesDto(String periodo, boolean habilitadas, long total, long pendientes,
                                        long reintentando, long enviadas, long fallidas, long omitidas,
-                                       List<ProblemaNotificacionDto> problemas) {
+                                       List<ProblemaNotificacionDto> problemas, boolean despachoAutomatico,
+                                       boolean envioConfigurado, String modoCorreo) {
 }

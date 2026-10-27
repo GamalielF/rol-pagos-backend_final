@@ -11,7 +11,9 @@ import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.PeriodoReposito
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.entity.DirectorioAd;
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.repository.DirectorioAdRepository;
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.service.NombresDirectorio;
+import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.config.CorreoProperties;
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.config.NotificacionProperties;
+import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.correo.EnviadorCorreo;
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.dto.response.InformeNotificacionesDto;
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.dto.response.ProblemaNotificacionDto;
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.dto.response.ResultadoEncoladoDto;
@@ -49,6 +51,8 @@ public class NotificacionService {
     private final DirectorioAdRepository directorioRepository;
     private final NombresDirectorio nombresDirectorio;
     private final NotificacionProperties propiedades;
+    private final EnviadorCorreo enviador;
+    private final CorreoProperties correo;
     private final AuditoriaAccionesService auditoria;
     private final Clock clock;
 
@@ -116,7 +120,8 @@ public class NotificacionService {
 
         return new InformeNotificacionesDto(ym.toString(), propiedades.habilitada(), todas.size(),
                 contar(todas, EstadoNotificacion.PENDIENTE), reintentando, contar(todas, EstadoNotificacion.ENVIADA),
-                contar(todas, EstadoNotificacion.FALLIDA), contar(todas, EstadoNotificacion.OMITIDA), problemas);
+                contar(todas, EstadoNotificacion.FALLIDA), contar(todas, EstadoNotificacion.OMITIDA), problemas,
+                propiedades.despachoAutomatico(), enviador.estaConfigurado(), correo.modo().name());
     }
 
     // ------------------------------------------------------------ interno

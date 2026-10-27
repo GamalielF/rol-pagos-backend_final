@@ -1,0 +1,193 @@
+diff --git a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/EnviadorCorreoApi.java b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/EnviadorCorreoApi.java
+index ae648e1..a22b572 100644
+--- a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/EnviadorCorreoApi.java
++++ b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/EnviadorCorreoApi.java
+@@ -75,6 +75,13 @@ public class EnviadorCorreoApi implements EnviadorCorreoConVariables {
+         if (!estaConfigurado()) {
+             throw new EnvioCorreoException("La API de correo no está configurada", true, null);
+         }
++        String problema = ValidadorConfiguracionCorreo.problemaDeUrl(api.url());
++        if (problema == null) {
++            problema = ValidadorConfiguracionCorreo.problemaDeToken(api.token());
++        }
++        if (problema != null) {
++            throw new EnvioCorreoException(problema, true, null);
++        }
+         String respuesta;
+         try {
+             respuesta = restClient.post()
+diff --git a/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/ValidadorConfiguracionCorreo.java b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/ValidadorConfiguracionCorreo.java
+new file mode 100644
+index 0000000..7ae3504
+--- /dev/null
++++ b/src/main/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/ValidadorConfiguracionCorreo.java
+@@ -0,0 +1,59 @@
++package ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.correo;
++
++import java.net.URI;
++import java.net.URISyntaxException;
++import java.util.Locale;
++
++/**
++ * Revisa la configuración de la API de correo antes de enviar. Cada problema se explica sin repetir el valor revisado:
++ * una URL o un token pueden llevar claves y el mensaje termina visible en pantalla.
++ */
++public final class ValidadorConfiguracionCorreo {
++
++    private ValidadorConfiguracionCorreo() {
++    }
++
++    /** @return qué tiene mal la URL, o null si está bien. */
++    public static String problemaDeUrl(String url) {
++        if (url == null || url.isBlank()) {
++            return "La URL de la API de correo está vacía";
++        }
++        String limpia = url.trim();
++        if (limpia.indexOf('"') >= 0 || limpia.indexOf('\'') >= 0) {
++            return "La URL de la API de correo lleva comillas: quítelas del .env (CORREO_API_URL=https://... sin comillas)";
++        }
++        if (limpia.indexOf('{') >= 0 || limpia.indexOf('}') >= 0) {
++            return "La URL de la API de correo lleva llaves { }: parece una plantilla de Postman; escriba la dirección real";
++        }
++        if (limpia.chars().anyMatch(Character::isWhitespace)) {
++            return "La URL de la API de correo tiene espacios: debe ser una sola dirección";
++        }
++        String minuscula = limpia.toLowerCase(Locale.ROOT);
++        if (!minuscula.startsWith("https://") && !minuscula.startsWith("http://")) {
++            return "La URL de la API de correo debe empezar por https:// (o http://)";
++        }
++        try {
++            String servidor = new URI(limpia).getRawAuthority();
++            if (servidor == null || servidor.isBlank()) {
++                return "La URL de la API de correo no tiene servidor después de https://";
++            }
++        } catch (URISyntaxException e) {
++            return "La URL de la API de correo no es una dirección válida";
++        }
++        return null;
++    }
++
++    /** @return qué tiene mal el token, o null si está bien (o no hay token). */
++    public static String problemaDeToken(String token) {
++        if (token == null || token.isEmpty()) {
++            return null;
++        }
++        for (int i = 0; i < token.length(); i++) {
++            char c = token.charAt(i);
++            if ((c < 0x20 && c != '\t') || c == 0x7f || c > 0xff) {
++                return "El token de la API de correo tiene caracteres no permitidos (saltos de línea u otros símbolos): revise su valor";
++            }
++        }
++        return null;
++    }
++}
+diff --git a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/EnviadorCorreoApiFormatoTest.java b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/EnviadorCorreoApiFormatoTest.java
+index ede6423..ca200fb 100644
+--- a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/EnviadorCorreoApiFormatoTest.java
++++ b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/EnviadorCorreoApiFormatoTest.java
+@@ -94,6 +94,28 @@ class EnviadorCorreoApiFormatoTest {
+         servidor.verify();
+     }
+ 
++    @Test
++    void conUnaUrlMalEscritaElMensajeDiceQueTieneMalSinRepetirlaYNoLlamaALaApi() {
++        EnviadorCorreoApi enviador = new EnviadorCorreoApi(new CorreoProperties.Api("\"https://correo.secreto.test/api?k=ABC\"", "secreto", "Authorization", "Bearer", null,
++                Duration.ofSeconds(5), Duration.ofSeconds(15), null), RestClient.builder().build(), EnvioCorreoProperties.SIN_AJUSTES);
++
++        assertThatThrownBy(() -> enviador.enviar(DESTINO, "Asunto", "Texto", "aviso-7"))
++                .isInstanceOfSatisfying(EnvioCorreoException.class, e -> {
++                    assertThat(e.getMessage()).contains("comillas").doesNotContain("secreto").doesNotContain("ABC");
++                    assertThat(e.esReintentable()).isTrue();
++                });
++    }
++
++    @Test
++    void conUnTokenConSaltoDeLineaElMensajeLoSeñalaSinRepetirlo() {
++        EnviadorCorreoApi enviador = new EnviadorCorreoApi(new CorreoProperties.Api(URL, "clave-privada\n", "Authorization", "Bearer", null,
++                Duration.ofSeconds(5), Duration.ofSeconds(15), null), RestClient.builder().build(), EnvioCorreoProperties.SIN_AJUSTES);
++
++        assertThatThrownBy(() -> enviador.enviar(DESTINO, "Asunto", "Texto", "aviso-7"))
++                .isInstanceOfSatisfying(EnvioCorreoException.class,
++                        e -> assertThat(e.getMessage()).contains("token").contains("caracteres no permitidos").doesNotContain("clave-privada"));
++    }
++
+     @Test
+     void unErrorInesperadoAlPrepararElEnvioSeConvierteEnUnFalloVisibleYReintentable() {
+         RestClient quebrado = RestClient.builder()
+diff --git a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/ValidadorConfiguracionCorreoTest.java b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/ValidadorConfiguracionCorreoTest.java
+new file mode 100644
+index 0000000..2ba1870
+--- /dev/null
++++ b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/ValidadorConfiguracionCorreoTest.java
+@@ -0,0 +1,71 @@
++package ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.correo;
++
++import org.junit.jupiter.api.Test;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++class ValidadorConfiguracionCorreoTest {
++
++    @Test
++    void unaUrlCorrectaNoTieneProblemas() {
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl("https://correo.interno.test/api/enviar")).isNull();
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl("http://localhost:8080/api/enviar")).isNull();
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl("  HTTPS://correo.test/x  ")).isNull();
++    }
++
++    @Test
++    void unaUrlVaciaOEnBlancoSeDiceAsi() {
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl(null)).contains("vacía");
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl("   ")).contains("vacía");
++    }
++
++    @Test
++    void lasComillasDelEnvSeSeñalanConLaSolucion() {
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl("\"https://correo.test/api\"")).contains("comillas").contains("sin comillas");
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl("'https://correo.test/api'")).contains("comillas");
++    }
++
++    @Test
++    void unaPlantillaDePostmanSeReconoce() {
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl("{{PROTOCOLO}}{{SERVER_NAME}}/notificaciones/send"))
++                .contains("llaves").contains("Postman");
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl("https://{{SERVER_NAME}}/api")).contains("llaves");
++    }
++
++    @Test
++    void losEspaciosDentroDeLaUrlSeSeñalan() {
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl("https://correo.test/api enviar")).contains("espacios");
++    }
++
++    @Test
++    void sinHttpsAlPrincipioSeDice() {
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl("correo.test/api")).contains("https://");
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl("ftp://correo.test/api")).contains("https://");
++    }
++
++    @Test
++    void sinServidorDespuesDelEsquemaSeDice() {
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl("https://")).isNotNull();
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl("https:///solo/ruta")).isNotNull();
++    }
++
++    @Test
++    void elMensajeNuncaRepiteLaUrlRevisada() {
++        String conClave = "https://correo.test/api?clave=SECRETO123 espacio";
++        assertThat(ValidadorConfiguracionCorreo.problemaDeUrl(conClave)).isNotNull().doesNotContain("SECRETO123").doesNotContain("correo.test");
++    }
++
++    @Test
++    void unTokenNormalOAusenteEstaBien() {
++        assertThat(ValidadorConfiguracionCorreo.problemaDeToken(null)).isNull();
++        assertThat(ValidadorConfiguracionCorreo.problemaDeToken("")).isNull();
++        assertThat(ValidadorConfiguracionCorreo.problemaDeToken("abc.DEF-123_xyz")).isNull();
++    }
++
++    @Test
++    void unTokenConSaltosDeLineaOSimbolosRarosSeSeñalaSinRepetirlo() {
++        assertThat(ValidadorConfiguracionCorreo.problemaDeToken("abc\n")).contains("caracteres no permitidos");
++        assertThat(ValidadorConfiguracionCorreo.problemaDeToken("abc\r")).contains("caracteres no permitidos");
++        assertThat(ValidadorConfiguracionCorreo.problemaDeToken("tokén€")).contains("caracteres no permitidos").doesNotContain("tokén");
++    }
++}

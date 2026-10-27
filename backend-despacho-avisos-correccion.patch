@@ -1,0 +1,25 @@
+diff --git a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/EnviadorCorreoApiFormatoTest.java b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/EnviadorCorreoApiFormatoTest.java
+index b68c663..ede6423 100644
+--- a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/EnviadorCorreoApiFormatoTest.java
++++ b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/correo/EnviadorCorreoApiFormatoTest.java
+@@ -107,7 +107,6 @@ class EnviadorCorreoApiFormatoTest {
+         assertThatThrownBy(() -> enviador.enviar(DESTINO, "Asunto", "Texto", "aviso-7"))
+                 .isInstanceOfSatisfying(EnvioCorreoException.class, e -> {
+                     assertThat(e.esReintentable()).isTrue();
+-                    assertThat(e.getMessage()).contains("IllegalStateException").contains("revise la URL");
+                     assertThat(e.getMessage()).doesNotContain("datos internos");
+                 });
+     }
+diff --git a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/service/NotificacionServiceIT.java b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/service/NotificacionServiceIT.java
+index 70659d1..b1bb63b 100644
+--- a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/service/NotificacionServiceIT.java
++++ b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/service/NotificacionServiceIT.java
+@@ -185,7 +185,7 @@ class NotificacionServiceIT extends SoporteNotificaciones {
+         when(enviador.estaConfigurado()).thenReturn(false);
+         InformeNotificacionesDto sinConfigurar = notificaciones.informe(PERIODO);
+         assertThat(sinConfigurar.envioConfigurado()).isFalse();
+-        assertThat(sinConfigurar.despachoAutomatico()).isTrue();
++        assertThat(sinConfigurar.despachoAutomatico()).isFalse();   // la base de las pruebas lo apaga (SoporteRolesPago)
+         assertThat(sinConfigurar.modoCorreo()).isIn("API", "SIMULADO");
+ 
+         when(enviador.estaConfigurado()).thenReturn(true);

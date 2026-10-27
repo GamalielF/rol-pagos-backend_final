@@ -97,10 +97,7 @@ public class DespachoNotificaciones {
         for (NotificacionRolPago aviso : lote) {
             YearMonth periodo = YearMonth.from(aviso.getPeriodo().getFechaPeriodo());
             try {
-                entregar(enviador, aviso.getEmailDestino(), PlantillaAviso.asunto(periodo),
-                        PlantillaAviso.cuerpo(periodo, propiedades.urlSistema()), "aviso-" + aviso.getId(),
-                        PlantillaAviso.variables(periodo, propiedades.urlSistema(), aviso.getEmailDestino(),
-                                aviso.getId(), LocalDate.now(clock)));
+                intentarEntrega(aviso, periodo);
                 guardar(aviso, null);
                 enviadas++;
             } catch (EnvioCorreoException e) {
@@ -121,6 +118,20 @@ public class DespachoNotificaciones {
             }
         }
         return new ResultadoLote(enviadas, reintentos, fallidas);
+    }
+
+    /** Un error que no sea de envío igual se anota en el aviso: si no, quedaría pendiente para siempre sin explicación. */
+    private void intentarEntrega(NotificacionRolPago aviso, YearMonth periodo) {
+        try {
+            entregar(enviador, aviso.getEmailDestino(), PlantillaAviso.asunto(periodo),
+                    PlantillaAviso.cuerpo(periodo, propiedades.urlSistema()), "aviso-" + aviso.getId(),
+                    PlantillaAviso.variables(periodo, propiedades.urlSistema(), aviso.getEmailDestino(),
+                            aviso.getId(), LocalDate.now(clock)));
+        } catch (EnvioCorreoException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw new EnvioCorreoException("Error inesperado al enviar (" + e.getClass().getSimpleName() + ")", true, e);
+        }
     }
 
     /** Anota el resultado. @return true si el aviso quedó FALLIDO de forma definitiva. */
