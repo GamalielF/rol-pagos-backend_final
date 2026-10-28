@@ -2,14 +2,17 @@ package ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.correo;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.config.CorreoIndividualProperties;
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.config.CorreoProperties;
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.config.EnvioCorreoProperties;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.util.UriComponentsBuilder;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import java.util.LinkedHashMap;
@@ -19,8 +22,11 @@ import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.net.http.HttpTimeoutException;
+import java.net.URI;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * Envío mediante la API de correo de la cooperativa. Manda un aviso por llamada, en el formato
@@ -45,15 +51,22 @@ public class EnviadorCorreoApi implements EnviadorCorreoConVariables {
     private final CorreoProperties.Api api;
     private final RestClient restClient;
     private final EnvioCorreoProperties envio;
+    private final CorreoIndividualProperties individual;
 
     public EnviadorCorreoApi(CorreoProperties.Api api, RestClient restClient) {
         this(api, restClient, EnvioCorreoProperties.SIN_AJUSTES);
     }
 
     public EnviadorCorreoApi(CorreoProperties.Api api, RestClient restClient, EnvioCorreoProperties envio) {
+        this(api, restClient, envio, CorreoIndividualProperties.SIN_CONFIGURAR);
+    }
+
+    public EnviadorCorreoApi(CorreoProperties.Api api, RestClient restClient, EnvioCorreoProperties envio,
+                             CorreoIndividualProperties individual) {
         this.api = api;
         this.restClient = restClient;
         this.envio = envio;
+        this.individual = individual == null ? CorreoIndividualProperties.SIN_CONFIGURAR : individual;
         if (envio.redirige()) {
             log.warn("REDIRECCION DE CORREO ACTIVA: todos los avisos saldran a una unica direccion de prueba");
         }
@@ -67,6 +80,77 @@ public class EnviadorCorreoApi implements EnviadorCorreoConVariables {
     @Override
     public void enviar(String destinatario, String asunto, String texto, String referencia) {
         enviar(destinatario, asunto, texto, referencia, Map.of());
+    }
+
+    /**
+     * Reenvía a una sola persona con el servicio individual de la API (.../send-prueba?destinatario=...). Sin esa URL
+     * configurada usa el envío masivo con un solo aviso. El contenido lo define la plantilla de la API.
+     */
+    @Override
+    public void reenviar(String destinatario, String asunto, String texto, String referencia,
+                         Map<String, String> variables) {
+        if (!individual.configurada()) {
+            enviar(destinatario, asunto, texto, referencia, variables);
+            return;
+        }
+        String problema = ValidadorConfiguracionCorreo.problemaDeUrl(individual.url());
+        if (problema == null) {
+            problema = ValidadorConfiguracionCorreo.problemaDeToken(api.token());
+        }
+        if (problema != null) {
+            throw new EnvioCorreoException(problema, true, null);
+        }
+        HttpMethod metodo = metodoIndividual();
+        String para = envio.redirige() ? envio.redirigirA().trim() : destinatario;
+        String respuesta = ejecutarIndividual(metodo, () -> restClient.method(metodo)
+                .uri(direccionIndividual(para))
+                .headers(cabeceras -> {
+                    if (tieneTexto(api.token())) {
+                        cabeceras.set(api.cabeceraAutorizacion(),
+                                tieneTexto(api.esquema()) ? api.esquema() + " " + api.token() : api.token());
+                    }
+                    if (tieneTexto(api.cabeceraIdempotencia()) && referencia != null) {
+                        cabeceras.set(api.cabeceraIdempotencia(), referencia);
+                    }
+                })
+                .retrieve()
+                .body(String.class));
+        verificarRespuesta(respuesta);
+    }
+
+    private URI direccionIndividual(String destinatario) {
+        String parametro = tieneTexto(individual.parametroDestinatario()) ? individual.parametroDestinatario().trim() : "destinatario";
+        return UriComponentsBuilder.fromUriString(individual.url().trim()).queryParam(parametro, destinatario).build().encode().toUri();
+    }
+
+    private HttpMethod metodoIndividual() {
+        String metodo = tieneTexto(individual.metodo()) ? individual.metodo().trim().toUpperCase(Locale.ROOT) : "POST";
+        if (!metodo.equals("GET") && !metodo.equals("POST")) {
+            throw new EnvioCorreoException("El método de la API individual de correo debe ser GET o POST", false, null);
+        }
+        return HttpMethod.valueOf(metodo);
+    }
+
+    private String ejecutarIndividual(HttpMethod metodo, Supplier<String> llamada) {
+        try {
+            return llamada.get();
+        } catch (RestClientResponseException e) {
+            if (e.getStatusCode().value() == 405) {
+                throw new EnvioCorreoException("La API de correo individual no acepta el método " + metodo
+                        + " (HTTP 405): cambie app.correo.individual.metodo a " + (metodo == HttpMethod.GET ? "POST" : "GET"),
+                        false, e);
+            }
+            throw clasificarEstado(e.getStatusCode().value(), e);
+        } catch (ResourceAccessException e) {
+            throw clasificarRed(e);
+        } catch (RestClientException e) {
+            throw new EnvioCorreoException("La API de correo respondió de forma inesperada", true, e);
+        } catch (EnvioCorreoException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw new EnvioCorreoException("No se pudo preparar el reenvío (" + e.getClass().getSimpleName()
+                    + "): revise la URL y la configuración de la API de correo", true, e);
+        }
     }
 
     @Override
@@ -96,7 +180,7 @@ public class EnviadorCorreoApi implements EnviadorCorreoConVariables {
                             cabeceras.set(api.cabeceraIdempotencia(), referencia);   // evita duplicados al reintentar
                         }
                     })
-                    .body(new SolicitudEnvio(List.of(armar(destinatario, asunto, texto, referencia, variables))))
+                    .body(new SolicitudEnvio(List.of(armar(destinatario, asunto, texto, variables))))
                     .retrieve()
                     .body(String.class);
         } catch (RestClientResponseException e) {
@@ -114,14 +198,10 @@ public class EnviadorCorreoApi implements EnviadorCorreoConVariables {
         verificarRespuesta(respuesta);
     }
 
-    private Notificacion armar(String destinatario, String asunto, String texto, String referencia,
-                               Map<String, String> variablesDelAviso) {
+    /** La redirección solo cambia a quién se envía: el asunto y el cuerpo viajan tal cual, porque los define la plantilla de la API. */
+    private Notificacion armar(String destinatario, String asunto, String texto, Map<String, String> variablesDelAviso) {
         boolean redirigido = envio.redirige();
         String para = redirigido ? envio.redirigirA().trim() : destinatario;
-        String asuntoFinal = redirigido ? "[PRUEBA] " + asunto : asunto;
-        String mensaje = redirigido
-                ? "Mensaje de prueba (" + referencia + "): el destinatario real no recibió este aviso.\n\n" + texto
-                : texto;
         Map<String, String> variables = null;
         if (envio.usaPlantilla()) {
             Map<String, String> mapa = new LinkedHashMap<>();
@@ -132,7 +212,7 @@ public class EnviadorCorreoApi implements EnviadorCorreoConVariables {
             mapa.putAll(envio.variables());   // lo fijado en la configuración tiene prioridad
             variables = mapa;
         }
-        return new Notificacion(envio.canal(), para, asuntoFinal, mensaje,
+        return new Notificacion(envio.canal(), para, asunto, texto,
                 envio.usaPlantilla() ? envio.codigoPlantilla().trim() : null, variables);
     }
 

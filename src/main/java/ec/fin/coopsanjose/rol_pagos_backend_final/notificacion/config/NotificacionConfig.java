@@ -22,7 +22,7 @@ public class NotificacionConfig {
     public EnviadorCorreo enviadorCorreo(CorreoProperties propiedades, SslBundles sslBundles, Environment entorno) {
         return switch (propiedades.modo()) {
             case API -> new EnviadorCorreoApi(propiedades.api(), crearRestClient(propiedades.api(), sslBundles),
-                    EnvioCorreoProperties.desde(entorno));
+                    EnvioCorreoProperties.desde(entorno), CorreoIndividualProperties.desde(entorno));
             case SIMULADO -> {
                 if (!entorno.matchesProfiles("dev")) {
                     // Un envío simulado en producción marcaría como "enviados" avisos que nunca salieron

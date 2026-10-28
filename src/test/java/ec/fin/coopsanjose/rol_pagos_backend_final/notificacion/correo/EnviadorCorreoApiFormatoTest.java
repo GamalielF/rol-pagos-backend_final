@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -83,11 +82,11 @@ class EnviadorCorreoApiFormatoTest {
     }
 
     @Test
-    void laRedireccionCambiaElDestinoMarcaElAsuntoYNoFiltraLaDireccionReal() {
+    void laRedireccionSoloCambiaElDestinoYNoTocaNiElAsuntoNiElCuerpoNiFiltraLaDireccionReal() {
         servidor.expect(requestTo(URL))
                 .andExpect(jsonPath("$.notifications[0].destinatario").value("prueba@coopsanjose.fin.ec"))
-                .andExpect(jsonPath("$.notifications[0].asunto").value(startsWith("[PRUEBA] ")))
-                .andExpect(jsonPath("$.notifications[0].mensaje").value(containsString("aviso-7")))
+                .andExpect(jsonPath("$.notifications[0].asunto").value("Asunto del aviso"))
+                .andExpect(jsonPath("$.notifications[0].mensaje").value("Texto del aviso"))
                 .andExpect(content().string(not(containsString(DESTINO))))
                 .andRespond(withSuccess());
         enviar(enviador(new EnvioCorreoProperties(null, null, null, "prueba@coopsanjose.fin.ec")));

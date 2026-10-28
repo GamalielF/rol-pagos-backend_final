@@ -6,4 +6,10 @@ import java.util.Map;
 public interface EnviadorCorreoConVariables extends EnviadorCorreo {
 
     void enviar(String destinatario, String asunto, String texto, String referencia, Map<String, String> variables);
+
+    @Override
+    default void reenviar(String destinatario, String asunto, String texto, String referencia,
+                          Map<String, String> variables) {
+        enviar(destinatario, asunto, texto, referencia, variables);
+    }
 }

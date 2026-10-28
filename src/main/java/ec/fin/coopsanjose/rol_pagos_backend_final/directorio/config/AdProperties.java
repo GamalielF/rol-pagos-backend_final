@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 
 /** Configuración del AD. urlBase y token llegan desde Vault (ad.url-base, ad.token). */
 @ConfigurationProperties(prefix = "app.ad")
@@ -17,6 +18,14 @@ public record AdProperties(
         @DefaultValue("coopsanjose.fin.ec") String dominioCorreo,
         @DefaultValue List<String> cuentasExcluidas,
         @DefaultValue Sincronizacion sincronizacion) {
+
+    /** El correo institucional: código de usuario + @ + dominio (por ejemplo fsepa@coopsanjose.fin.ec). Null si no se puede armar. */
+    public String correoDe(String username) {
+        if (username == null || username.isBlank() || dominioCorreo == null || dominioCorreo.isBlank()) {
+            return null;
+        }
+        return username.trim().toLowerCase(Locale.ROOT) + "@" + dominioCorreo.trim();
+    }
 
     public record Sincronizacion(
             @DefaultValue("false") boolean habilitada,

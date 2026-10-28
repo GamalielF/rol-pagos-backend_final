@@ -8,5 +8,7 @@ app:
       ssl-bundle: ad
       codigo-plantilla: ${CORREO_CODIGO_PLANTILLA:ACCOUNT_ACTIVATE}
       redirigir-a: ${CORREO_REDIRIGIR_A}
+    individual:
+      url: ${CORREO_API_URL_INDIVIDUAL:}   # opcional: si se omite, el reenvío usa el envío masivo
   notificaciones:
     intervalo-ms: 10000

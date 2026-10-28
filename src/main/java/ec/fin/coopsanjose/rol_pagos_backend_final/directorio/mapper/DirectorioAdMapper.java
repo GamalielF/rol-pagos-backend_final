@@ -69,8 +69,7 @@ public class DirectorioAdMapper {
     }
 
     private String correo(String username) {
-        String dominio = propiedades.dominioCorreo();
-        return (dominio == null || dominio.isBlank()) ? null : username + "@" + dominio.trim();
+        return propiedades.correoDe(username);
     }
 
 

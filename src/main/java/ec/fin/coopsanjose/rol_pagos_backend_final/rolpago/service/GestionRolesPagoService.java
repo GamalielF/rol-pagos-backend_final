@@ -100,9 +100,7 @@ public class GestionRolesPagoService {
     }
 
     private static NotificacionRolDto notificacionDe(NotificacionRolPago aviso) {
-        return aviso == null ? null
-                : new NotificacionRolDto(aviso.getEstado().name(), aviso.getIntentos(), aviso.getEnviadaEn(),
-                aviso.getProximoIntento(), aviso.getUltimoError());
+        return NotificacionRolDto.de(aviso);
     }
 
     /** Un nombre por cédula: el de un registro ACTIVO si lo hay (las cédulas con varios códigos comparten persona). */

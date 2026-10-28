@@ -1,6 +1,6 @@
 package ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.correo;
-import java.util.LinkedHashMap;
 
+import java.util.Map;
 
 public interface EnviadorCorreo {
 
@@ -12,4 +12,13 @@ public interface EnviadorCorreo {
      * @throws EnvioCorreoException con un mensaje seguro y si vale la pena reintentar
      */
     void enviar(String destinatario, String asunto, String texto, String referencia);
+
+    /**
+     * Reenvío puntual de un aviso a una persona. Por defecto es el mismo envío de siempre; el adaptador de la API de
+     * correo lo cambia por su servicio individual cuando está configurado.
+     */
+    default void reenviar(String destinatario, String asunto, String texto, String referencia,
+                          Map<String, String> variables) {
+        enviar(destinatario, asunto, texto, referencia);
+    }
 }

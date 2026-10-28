@@ -33,11 +33,11 @@ class NotificacionServiceIT extends SoporteNotificaciones {
                 .filter(a -> a.getTipoAccion() == tipo && "2099-03".equals(a.getPeriodo())).count();
     }
 
-    /** Juan recibe su aviso, a María el servicio le rechaza la dirección, y Luis no tiene correo. */
+    /** Juan recibe su aviso, a María el servicio le rechaza la dirección, y a Luis no se le puede armar el correo (sin código de usuario). */
     private void escenarioConUnFallidoYUnOmitido() {
         prepararTresPersonas();
         DirectorioAd luis = directorioRepository.findByUsernameAd("zz.luis").orElseThrow();
-        luis.setEmail(null);
+        luis.setUsernameAd(" ");
         directorioRepository.save(luis);
         em.flush();
         publicar();
@@ -60,6 +60,24 @@ class NotificacionServiceIT extends SoporteNotificaciones {
         });
         assertThat(avisoDe(CEDULA_JUAN).getUsernameDestino()).isEqualTo("zz.juan");
         assertThat(avisoDe(CEDULA_JUAN).getEmailDestino()).isEqualTo("zz.juan@coopsanjose.fin.ec");
+    }
+
+    @Test
+    void elCorreoDelAvisoSeArmaConElCodigoDeUsuarioAunqueElDirectorioGuardeOtroDato() {
+        prepararTresPersonas();
+        DirectorioAd juan = directorioRepository.findByUsernameAd("zz.juan").orElseThrow();
+        juan.setEmail("dato.viejo@otro-dominio.com");
+        DirectorioAd luis = directorioRepository.findByUsernameAd("zz.luis").orElseThrow();
+        luis.setEmail(null);
+        directorioRepository.save(juan);
+        directorioRepository.save(luis);
+        em.flush();
+
+        publicar();
+
+        assertThat(avisoDe(CEDULA_JUAN).getEmailDestino()).isEqualTo("zz.juan@coopsanjose.fin.ec");
+        assertThat(avisoDe(CEDULA_LUIS).getEstado()).isEqualTo(EstadoNotificacion.PENDIENTE);
+        assertThat(avisoDe(CEDULA_LUIS).getEmailDestino()).isEqualTo("zz.luis@coopsanjose.fin.ec");
     }
 
     @Test

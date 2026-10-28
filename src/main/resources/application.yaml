@@ -84,6 +84,10 @@ app:
       variables: { }                           # variables FIJAS de la plantilla (p. ej. NombreEmpresa)
       redirigir-a: ""                         # SOLO PRUEBAS: con valor, TODO aviso sale a esta única dirección
       # ssl-bundle: correo-api                # solo si la API usa un certificado de CA interna
+    individual:                                 # API de correo para UNA persona: se usa al reenviar un aviso
+      url: ${correo.individual.url:}            # vacío = el reenvío usa el envío masivo con un solo aviso
+      metodo: POST                              # GET | POST, según el contrato de la API
+      parametro-destinatario: destinatario      # nombre del parámetro que lleva la dirección
   notificaciones:
     habilitada: false                         # se enciende por entorno
     despacho-automatico: true                 # false = la cola se llena pero no se envía

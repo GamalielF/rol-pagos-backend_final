@@ -65,6 +65,13 @@ public class NotificacionRolPago extends BaseEntity {
     @Column(name = "ENVIADA_EN")
     private LocalDateTime enviadaEn;
 
+    /** Última vez que alguien pidió reenviar este aviso a mano. */
+    @Column(name = "REENVIADA_EN")
+    private LocalDateTime reenviadaEn;
+
+    @Column(name = "REENVIOS", nullable = false)
+    private int reenvios;
+
     /** Categoría del fallo, sin detalles técnicos ni datos personales. */
     @Column(name = "ULTIMO_ERROR", length = 200)
     private String ultimoError;

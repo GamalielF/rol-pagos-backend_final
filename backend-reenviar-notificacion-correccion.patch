@@ -1,0 +1,17 @@
+diff --git a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/service/ReenvioNotificacionServiceIT.java b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/service/ReenvioNotificacionServiceIT.java
+index 2050898..8e6d5fd 100644
+--- a/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/service/ReenvioNotificacionServiceIT.java
++++ b/src/test/java/ec/fin/coopsanjose/rol_pagos_backend_final/notificacion/service/ReenvioNotificacionServiceIT.java
+@@ -140,8 +140,11 @@ class ReenvioNotificacionServiceIT extends SoporteNotificaciones {
+     @Test
+     void unRolSinAvisoRecibeUnoNuevoAlReenviar() {
+         publicarYEnviarTodo();
+-        avisoRepository.delete(avisoDe(CEDULA_LUIS));
++        // Los repositorios no tienen delete (BaseRepository): se quita con SQL nativo, dentro de la transacción de la prueba
++        em.createNativeQuery("DELETE FROM NOTIFICACIONES_ROLES_PAGO WHERE ID = ?1")
++                .setParameter(1, avisoDe(CEDULA_LUIS).getId()).executeUpdate();
+         em.flush();
++        em.clear();
+ 
+         ResultadoReenvioDto resultado = reenviar(CEDULA_LUIS);
+ 

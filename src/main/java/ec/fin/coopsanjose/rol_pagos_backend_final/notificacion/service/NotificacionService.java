@@ -11,6 +11,7 @@ import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.PeriodoReposito
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.entity.DirectorioAd;
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.repository.DirectorioAdRepository;
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.service.NombresDirectorio;
+import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.config.AdProperties;
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.config.CorreoProperties;
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.config.NotificacionProperties;
 import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.correo.EnviadorCorreo;
@@ -53,6 +54,7 @@ public class NotificacionService {
     private final NotificacionProperties propiedades;
     private final EnviadorCorreo enviador;
     private final CorreoProperties correo;
+    private final AdProperties ad;
     private final AuditoriaAccionesService auditoria;
     private final Clock clock;
 
@@ -152,13 +154,14 @@ public class NotificacionService {
                 aviso.setCedula(rol.getCedula());
             }
             DirectorioAd destino = destinos.get(rol.getCedula());
-            if (destino == null || destino.getEmail() == null || destino.getEmail().isBlank()) {
+            String correoDestino = destino == null ? null : ad.correoDe(destino.getUsernameAd());
+            if (correoDestino == null) {
                 aviso.setEstado(EstadoNotificacion.OMITIDA);
                 aviso.setUltimoError(SIN_CUENTA);
                 omitidas++;
             } else {
                 aviso.setUsernameDestino(destino.getUsernameAd());
-                aviso.setEmailDestino(destino.getEmail());
+                aviso.setEmailDestino(correoDestino);
                 aviso.setEstado(EstadoNotificacion.PENDIENTE);
                 aviso.setProximoIntento(ahora);
                 aviso.setUltimoError(null);

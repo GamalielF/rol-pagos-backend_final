@@ -59,7 +59,7 @@ Para probar que **solo** el JWT abre la puerta (sin el modo B), ejecuta con `-Da
 | `EMPLEADO` | Todo usuario activo del AD | Consultar **su propio** rol publicado |
 | `RRHH` | Lo concede un ADMIN | Cargar, publicar y revisar roles; ver avisos y cobertura |
 | `ADMIN` | `fsepa` y `msavala` (configuración) y quien se designe | Todo lo anterior, más usuarios, directorio y auditoría |
-| Permiso `VER_ROLES_AJENOS` | ADMIN siempre; RRHH solo si un ADMIN se lo concede | Ver el rol de otra persona, con motivo obligatorio (10 a 200 caracteres) |
+| Permiso `VER_ROLES_AJENOS` | ADMIN siempre; RRHH lo recibe al asignarle el rol (por defecto sí) y un ADMIN puede quitárselo | Ver el rol de otra persona, con motivo obligatorio (10 a 200 caracteres) |
 
 ## 3. Guion de demostración (con Postman)
 
@@ -77,7 +77,7 @@ Importa `docs/postman/roles-pago-demo.postman_collection.json`. En la pestaña *
 | 6 | Auditoría | Accesos, acciones, intentos denegados, exportación CSV | 200 |
 
 Tras publicar, el despachador envía los avisos en menos de un minuto (cada 30 s; 10 s en el perfil `demo`). Con el perfil `demo`
-el correo llega a la dirección de `CORREO_REDIRIGIR_A`, marcado `[PRUEBA]`.
+el correo llega a la dirección de `CORREO_REDIRIGIR_A`; la redirección solo cambia el destinatario, el asunto y el cuerpo los define la plantilla de la API.
 
 ## 4. Dónde se cumple cada requisito
 

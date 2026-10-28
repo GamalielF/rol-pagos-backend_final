@@ -1,5 +1,7 @@
 package ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response;
 
+import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.entity.NotificacionRolPago;
+
 import java.time.LocalDateTime;
 
 /**
@@ -8,5 +10,11 @@ import java.time.LocalDateTime;
  * El error es una categoría del fallo, sin datos personales.
  */
 public record NotificacionRolDto(String estado, int intentos, LocalDateTime enviadaEn, LocalDateTime proximoIntento,
-                                 String ultimoError) {
+                                 String ultimoError, LocalDateTime reenviadaEn, int reenvios) {
+
+    public static NotificacionRolDto de(NotificacionRolPago aviso) {
+        return aviso == null ? null
+                : new NotificacionRolDto(aviso.getEstado().name(), aviso.getIntentos(), aviso.getEnviadaEn(),
+                aviso.getProximoIntento(), aviso.getUltimoError(), aviso.getReenviadaEn(), aviso.getReenvios());
+    }
 }
