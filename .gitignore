@@ -40,11 +40,19 @@ build/
 *.jks
 *.pem
 *.key
-VAULT_DEV_ROOT_TOKEN=
-VAULT_PORT=8200
+*.patch
+respaldo-*.sql
+mi-rol.pdf
 
 
 # Credenciales generadas por el script de Vault (nunca al repositorio)
 docker/runtime/
 
 data/
+
+# Archivos de trabajo locales: nunca al repositorio
+*.patch
+respaldo-*.sql
+lista-anterior*.txt
+accesos.csv
+mi-rol.pdf
