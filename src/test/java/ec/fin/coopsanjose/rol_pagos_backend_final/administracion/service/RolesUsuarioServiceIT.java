@@ -6,6 +6,7 @@ import ec.fin.coopsanjose.rol_pagos_backend_final.common.seguridad.Permiso;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.seguridad.ResolutorRoles.RolesYPermisos;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.seguridad.Rol;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.SoporteRolesPago;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -15,6 +16,11 @@ class RolesUsuarioServiceIT extends SoporteRolesPago {
 
     @Autowired private RolesUsuarioService servicio;
     @Autowired private AsignacionRolRepository repositorio;
+
+    @BeforeEach
+    void aislarDeLosDatosReales() {
+        apartarAsignacionesDeLosAdministradoresDeArranque();
+    }
 
     private AsignacionRol asignar(String usuario, Rol rol, boolean verRolesAjenos) {
         AsignacionRol asignacion = new AsignacionRol();

@@ -40,6 +40,7 @@ class AdministracionUsuariosServiceIT extends SoporteRolesPago {
     @BeforeEach
     void escenario() {
         SecurityContextHolder.clearContext();
+        apartarAsignacionesDeLosAdministradoresDeArranque();
         persona("zz.pedro", CEDULA_JUAN, NOMBRE_JUAN, true);
     }
 

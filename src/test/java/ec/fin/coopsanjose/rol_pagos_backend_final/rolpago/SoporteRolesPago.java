@@ -1,6 +1,7 @@
 package ec.fin.coopsanjose.rol_pagos_backend_final.rolpago;
 
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.PeriodoRepository;
+import ec.fin.coopsanjose.rol_pagos_backend_final.administracion.config.AdministradoresProperties;
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.entity.DirectorioAd;
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.repository.DirectorioAdRepository;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.ResultadoArchivoDto;
@@ -48,6 +49,7 @@ public abstract class SoporteRolesPago {
     private static final Path ALMACEN = crearAlmacenTemporal();
 
     @Autowired protected EntityManager em;
+    @Autowired protected AdministradoresProperties administradores;
     @Autowired protected DirectorioAdRepository directorioRepository;
     @Autowired protected RolPagoRepository rolPagoRepository;
     @Autowired protected PeriodoRepository periodoRepository;
@@ -64,6 +66,19 @@ public abstract class SoporteRolesPago {
     void limpiarDirectorio() {
         // Se revierte al terminar: así el directorio real no interfiere con las personas de la prueba
         em.createNativeQuery("DELETE FROM DIRECTORIO_AD").executeUpdate();
+        em.flush();
+        em.clear();
+    }
+
+    /**
+     * La base de desarrollo es la misma que usa la aplicación: si alguien dio un rol a un administrador de arranque desde
+     * la pantalla, la prueba lo vería. Se aparta solo dentro de esta prueba (la transacción se revierte al terminar).
+     */
+    protected void apartarAsignacionesDeLosAdministradoresDeArranque() {
+        for (String usuario : administradores.administradoresIniciales()) {
+            em.createNativeQuery("UPDATE ASIGNACIONES_ROL SET USERNAME_AD = CONCAT('apartado.', USERNAME_AD) WHERE LOWER(USERNAME_AD) = ?1")
+                    .setParameter(1, usuario).executeUpdate();
+        }
         em.flush();
         em.clear();
     }

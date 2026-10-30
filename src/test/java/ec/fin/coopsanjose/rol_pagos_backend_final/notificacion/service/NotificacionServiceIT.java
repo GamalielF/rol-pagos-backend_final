@@ -118,10 +118,19 @@ class NotificacionServiceIT extends SoporteNotificaciones {
                 .satisfies(a -> assertThat(a.getUsernameDestino()).isEqualTo("zz.juan"));
     }
 
+    /** El correo se arma con el código de usuario: sin él no hay a dónde avisar. */
+    private void cambiarCodigoDeUsuario(String actual, String nuevo) {
+        DirectorioAd persona = directorioRepository.findByUsernameAd(actual).orElseThrow();
+        persona.setUsernameAd(nuevo);
+        directorioRepository.save(persona);
+        em.flush();
+    }
+
     @Test
-    void quienNoTieneCorreoQuedaOmitidoYNoCuentaComoEncolado() {
-        persona("zz.juan", CEDULA_JUAN, NOMBRE_JUAN, true);   // sin correo
+    void quienNoTieneCodigoDeUsuarioQuedaOmitidoYNoCuentaComoEncolado() {
+        persona("zz.juan", CEDULA_JUAN, NOMBRE_JUAN, true);
         cargarUno(CEDULA_JUAN + ".pdf", rol(MES_PERIODO, NOMBRE_JUAN));
+        cambiarCodigoDeUsuario("zz.juan", " ");
 
         PublicacionDto resultado = publicar();
 
@@ -147,15 +156,13 @@ class NotificacionServiceIT extends SoporteNotificaciones {
     }
 
     @Test
-    void generarDaOtraOportunidadAQuienAhoraTieneCorreo() {
-        persona("zz.juan", CEDULA_JUAN, NOMBRE_JUAN, true);   // sin correo
+    void generarDaOtraOportunidadAQuienAhoraTieneCodigoDeUsuario() {
+        persona("zz.juan", CEDULA_JUAN, NOMBRE_JUAN, true);
         cargarUno(CEDULA_JUAN + ".pdf", rol(MES_PERIODO, NOMBRE_JUAN));
+        cambiarCodigoDeUsuario("zz.juan", " ");
         publicar();
         assertThat(avisoDe(CEDULA_JUAN).getEstado()).isEqualTo(EstadoNotificacion.OMITIDA);
-        DirectorioAd juan = directorioRepository.findByUsernameAd("zz.juan").orElseThrow();
-        juan.setEmail("zz.juan@coopsanjose.fin.ec");
-        directorioRepository.save(juan);
-        em.flush();
+        cambiarCodigoDeUsuario(" ", "zz.juan");
 
         ResultadoEncoladoDto resultado = notificaciones.generar(PERIODO);
 
