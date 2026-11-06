@@ -46,6 +46,11 @@ public class NotificacionService {
 
     private static final String SIN_CUENTA = "No hay una cuenta activa con correo en el AD";
 
+    /** Entre varias cuentas activas de una persona se avisa a la de creación más reciente (el último gana). */
+    private static final Comparator<DirectorioAd> ORDEN_DESTINO =
+            Comparator.comparing(DirectorioAd::getFechaCreacionAd, Comparator.nullsFirst(Comparator.naturalOrder()))
+                    .thenComparing(DirectorioAd::getUsernameAd);
+
     private final NotificacionRolPagoRepository repositorio;
     private final PeriodoRepository periodoRepository;
     private final RolPagoRepository rolPagoRepository;
@@ -100,6 +105,43 @@ public class NotificacionService {
         }
         auditoria.registrar(TipoAccion.NOTIFICACIONES_REINTENTADAS, ym.toString(), null, "avisos=" + reintentadas);
         return reintentadas;
+    }
+
+    /**
+     * Corrección de un período YA publicado: el aviso de ese rol vuelve a la cola aunque ya se hubiera enviado, para que la
+     * persona sepa que su rol cambió. Si el rol es nuevo, crea su aviso. Con los avisos apagados no hace nada.
+     * Corre dentro de la transacción de quien corrige: si algo falla, el rol y su aviso se deshacen juntos.
+     */
+    @Transactional
+    public void reencolarPorCorreccion(Periodo periodo, RolPago rol, List<DirectorioAd> cuentasActivas) {
+        if (!propiedades.habilitada()) {
+            return;
+        }
+        NotificacionRolPago aviso = repositorio.findByPeriodo_IdAndCedula(periodo.getId(), rol.getCedula())
+                .orElseGet(() -> {
+                    NotificacionRolPago nuevo = new NotificacionRolPago();
+                    nuevo.setPeriodo(periodo);
+                    nuevo.setCedula(rol.getCedula());
+                    return nuevo;
+                });
+        if (aviso.getEstado() == EstadoNotificacion.ENVIADA) {
+            aviso.setReenvios(aviso.getReenvios() + 1);   // esta persona recibirá un segundo correo
+        }
+        aviso.setRolPagoId(rol.getId());
+        DirectorioAd destino = cuentasActivas.stream().max(ORDEN_DESTINO).orElse(null);
+        String correoDestino = destino == null ? null : ad.correoDe(destino.getUsernameAd());
+        if (correoDestino == null) {
+            aviso.setEstado(EstadoNotificacion.OMITIDA);
+            aviso.setUltimoError(SIN_CUENTA);
+        } else {
+            aviso.setUsernameDestino(destino.getUsernameAd());
+            aviso.setEmailDestino(correoDestino);
+            aviso.setEstado(EstadoNotificacion.PENDIENTE);
+            aviso.setIntentos(0);
+            aviso.setProximoIntento(LocalDateTime.now(clock));
+            aviso.setUltimoError(null);
+        }
+        repositorio.save(aviso);
     }
 
     @Transactional(readOnly = true)
@@ -177,8 +219,7 @@ public class NotificacionService {
     private Map<String, DirectorioAd> destinosPorCedula() {
         Map<String, DirectorioAd> destinos = new HashMap<>();
         directorioRepository.findAllByEstadoRegistro(EstadoRegistro.ACTIVO).stream()
-                .sorted(Comparator.comparing(DirectorioAd::getFechaCreacionAd, Comparator.nullsFirst(Comparator.naturalOrder()))
-                        .thenComparing(DirectorioAd::getUsernameAd))
+                .sorted(ORDEN_DESTINO)
                 .forEach(d -> destinos.put(d.getCedula(), d));
         return destinos;
     }

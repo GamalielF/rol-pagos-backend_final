@@ -9,10 +9,14 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface NotificacionRolPagoRepository extends BaseRepository<NotificacionRolPago> {
 
     List<NotificacionRolPago> findByPeriodo_Id(Long idPeriodo);
+
+    /** Hay a lo sumo uno: la base garantiza un aviso por período y cédula. */
+    Optional<NotificacionRolPago> findByPeriodo_IdAndCedula(Long idPeriodo, String cedula);
 
     /** Los avisos que ya les toca salir, en orden de llegada. El límite lo da el Pageable. */
     @Query("select n from NotificacionRolPago n join fetch n.periodo "

@@ -4,9 +4,11 @@ import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.EstadoPeriodo;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.Periodo;
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.client.DirectorioAdClient;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.SoporteRolesPago;
+import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.pdf.PdfDePrueba;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -15,6 +17,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -144,7 +147,7 @@ class RrhhRolPagoControllerIT extends SoporteRolesPago {
     }
 
     @Test
-    void unPeriodoPublicadoBloqueaLaCargaYLasModificaciones() throws Exception {
+    void unPeriodoPublicadoExigeElMotivoParaCargarYParaRetirarUnRol() throws Exception {
         cargarJuan();
         Long id = rolDe(CEDULA_JUAN).getId();
         publicarElPeriodo();
@@ -152,9 +155,54 @@ class RrhhRolPagoControllerIT extends SoporteRolesPago {
         mockMvc.perform(multipart(BASE)
                         .file(archivo(CEDULA_JUAN + ".pdf", rol(MES_PERIODO, NOMBRE_JUAN)))
                         .with(como("RRHH")))
-                .andExpect(status().isConflict());
+                .andExpect(status().isBadRequest());
         mockMvc.perform(post(BASE + "/" + id + "/inactivar").with(como("RRHH")))
-                .andExpect(status().isConflict());
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void laRevisionDeUnaCargaNoGuardaNadaYLoDiceAsi() throws Exception {
+        mockMvc.perform(multipart(BASE)
+                        .file(archivo(CEDULA_JUAN + ".pdf", rol(MES_PERIODO, NOMBRE_JUAN)))
+                        .param("simular", "true")
+                        .with(como("RRHH")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Revisión de la carga: no se guardó nada"))
+                .andExpect(jsonPath("$.content.simulacion").value(true))
+                .andExpect(jsonPath("$.content.resultados[0].estado").value("CARGADO"))
+                .andExpect(jsonPath("$.content.resultados[0].titular").value(NOMBRE_JUAN));
+
+        assertThat(periodoRepository.findByFechaPeriodo(PERIODO.atDay(1))).isEmpty();
+    }
+
+    @Test
+    void corregirUnPeriodoPublicadoConMotivoReemplazaElRol() throws Exception {
+        cargarJuan();
+        publicarElPeriodo();
+        byte[] corregido = PdfDePrueba.crear("LIQUIDACION CORREGIDA", "MES AÑO", MES_PERIODO, NOMBRE_JUAN);
+
+        mockMvc.perform(multipart(BASE)
+                        .file(archivo(CEDULA_JUAN + ".pdf", corregido))
+                        .param("motivo", "Se subió el rol equivocado")
+                        .with(como("RRHH")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.simulacion").value(false))
+                .andExpect(jsonPath("$.content.reemplazados").value(1))
+                .andExpect(jsonPath("$.content.resultados[0].estado").value("REEMPLAZADO"));
+    }
+
+    @Test
+    void retirarUnRolPublicadoConMotivoLoDejaInactivo() throws Exception {
+        cargarJuan();
+        Long id = rolDe(CEDULA_JUAN).getId();
+        publicarElPeriodo();
+
+        mockMvc.perform(post(BASE + "/" + id + "/inactivar")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"motivo\":\"Se subió a la persona equivocada\"}")
+                        .with(como("RRHH")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.estado").value("INACTIVO"));
     }
 
     @Test

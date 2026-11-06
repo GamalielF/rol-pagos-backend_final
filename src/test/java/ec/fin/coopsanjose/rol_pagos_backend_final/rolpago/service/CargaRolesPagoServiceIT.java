@@ -1,7 +1,7 @@
 package ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.service;
 
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.entity.EstadoRegistro;
-import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.ConflictoException;
+import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.SolicitudInvalidaException;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.EstadoPeriodo;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.Periodo;
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.client.DirectorioAdClient;
@@ -193,7 +193,7 @@ class CargaRolesPagoServiceIT extends SoporteRolesPago {
     }
 
     @Test
-    void unPeriodoPublicadoNoAdmiteCargas() {
+    void unPeriodoPublicadoSoloAdmiteCargasConMotivo() {
         cargarUno(CEDULA_JUAN + ".pdf", rol(MES_PERIODO, NOMBRE_JUAN));
         Periodo periodo = periodoRepository.findByFechaPeriodo(PERIODO.atDay(1)).orElseThrow();
         periodo.setEstadoPeriodo(EstadoPeriodo.PUBLICADO);
@@ -201,7 +201,7 @@ class CargaRolesPagoServiceIT extends SoporteRolesPago {
         em.flush();
 
         assertThatThrownBy(() -> cargarUno(CEDULA_MARIA + ".pdf", rol(MES_PERIODO, NOMBRE_MARIA)))
-                .isInstanceOf(ConflictoException.class)
-                .hasMessageContaining("ya fue publicado");
+                .isInstanceOf(SolicitudInvalidaException.class)
+                .hasMessageContaining("indique el motivo");
     }
 }

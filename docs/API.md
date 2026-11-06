@@ -69,10 +69,10 @@ El `{periodo}` es `yyyy-MM`; `{id}` es el `id` del `RolPagoResumenResponse`.
 | Método y ruta | Entrada | Respuesta |
 |---|---|---|
 | `GET /rrhh/periodos` | — | `PeriodoResumenResponse[]`, del más reciente al más antiguo |
-| `POST /rrhh/periodos/{periodo}/roles-pago` | `multipart/form-data`, campo `archivos` repetido (un PDF por archivo) | `ResultadoCargaResponse` con el resultado de **cada** archivo |
+| `POST /rrhh/periodos/{periodo}/roles-pago` | `multipart/form-data`: campo `archivos` repetido (un PDF por archivo) y, opcionales, `simular` (`true` = solo revisar, **no guarda nada**) y `motivo` | `ResultadoCargaResponse` con el resultado de **cada** archivo (`archivo`, `estado`, `mensaje`, `titular`) y `simulacion`. **Período publicado = corrección:** exige `motivo` (10 a 200 caracteres) salvo con `simular=true`; reemplaza los roles que cambiaron, agrega los nuevos, devuelve a la cola el aviso de cada persona afectada y deja `CARGA_CORRECCION`, `ROL_REEMPLAZADO` y `ROL_AGREGADO` en la auditoría. Sin motivo responde 400 |
 | `GET /rrhh/periodos/{periodo}/roles-pago` | — | `ListadoPeriodoResponse` |
-| `POST /rrhh/periodos/{periodo}/roles-pago/{id}/inactivar` | — | `RolPagoResumenResponse` |
-| `POST /rrhh/periodos/{periodo}/roles-pago/{id}/activar` | — | `RolPagoResumenResponse` |
+| `POST /rrhh/periodos/{periodo}/roles-pago/{id}/inactivar` | Opcional `{ "motivo": "..." }`. **Obligatorio (10 a 200 caracteres) si el período ya está publicado** | `RolPagoResumenResponse` |
+| `POST /rrhh/periodos/{periodo}/roles-pago/{id}/activar` | Opcional `{ "motivo": "..." }`. Obligatorio si el período ya está publicado. Reponer un rol **no envía** un aviso nuevo: use *Generar los que falten* | `RolPagoResumenResponse` |
 | `POST /rrhh/periodos/{periodo}/roles-pago/{id}/ver` | `{ "motivo": "…" }` (10 a 200 caracteres) | `RolPagoPdfResponse` |
 | `GET /rrhh/periodos/{periodo}/resumen` | — | `ResumenPeriodoResponse`: cuadre de personas activas contra roles, en los dos sentidos |
 | `POST /rrhh/periodos/{periodo}/publicar` | opcional `{ "confirmarFaltantes": true }` | `PublicacionResponse` |

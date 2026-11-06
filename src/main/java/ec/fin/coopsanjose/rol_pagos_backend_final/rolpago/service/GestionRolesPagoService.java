@@ -3,7 +3,6 @@ package ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.service;
 import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.entity.TipoAccion;
 import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.service.AuditoriaAccionesService;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.entity.EstadoRegistro;
-import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.ConflictoException;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.RecursoNoEncontradoException;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.EstadoPeriodo;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.Periodo;
@@ -59,34 +58,52 @@ public class GestionRolesPagoService {
 
     @Transactional
     public RolPagoResumenDto inactivar(YearMonth ym, Long id) {
-        RolPago rol = obtenerEditable(ym, id);
+        return inactivar(ym, id, null);
+    }
+
+    /** Antes de publicar, sin más trámite. Con el período ya publicado es una corrección: exige el motivo y lo deja en la auditoría. */
+    @Transactional
+    public RolPagoResumenDto inactivar(YearMonth ym, Long id, String motivo) {
+        RolPago rol = obtenerDelPeriodo(ym, id);
+        String motivoLimpio = motivoSiEstaPublicado(rol, motivo);
         rol.inactivar();
         RolPago guardado = rolPagoRepository.save(rol);
-        auditoria.registrar(TipoAccion.ROL_INACTIVADO, ym.toString(), guardado.getId(), "Retirado por RRHH antes de publicar");
+        auditoria.registrar(TipoAccion.ROL_INACTIVADO, ym.toString(), guardado.getId(),
+                motivoLimpio == null ? "Retirado por RRHH antes de publicar"
+                        : "Retirado por RRHH después de publicar; motivo=" + motivoLimpio);
         return resumen(guardado);
     }
 
     @Transactional
     public RolPagoResumenDto activar(YearMonth ym, Long id) {
-        RolPago rol = obtenerEditable(ym, id);
+        return activar(ym, id, null);
+    }
+
+    @Transactional
+    public RolPagoResumenDto activar(YearMonth ym, Long id, String motivo) {
+        RolPago rol = obtenerDelPeriodo(ym, id);
+        String motivoLimpio = motivoSiEstaPublicado(rol, motivo);
         rol.activar();
         RolPago guardado = rolPagoRepository.save(rol);
-        auditoria.registrar(TipoAccion.ROL_ACTIVADO, ym.toString(), guardado.getId(), "Repuesto por RRHH antes de publicar");
+        auditoria.registrar(TipoAccion.ROL_ACTIVADO, ym.toString(), guardado.getId(),
+                motivoLimpio == null ? "Repuesto por RRHH antes de publicar"
+                        : "Repuesto por RRHH después de publicar; motivo=" + motivoLimpio);
         return resumen(guardado);
     }
 
-    /** El rol debe pertenecer al período de la URL (evita tocar un rol ajeno cambiando el id) y no estar publicado. */
-    private RolPago obtenerEditable(YearMonth ym, Long id) {
+    /** El rol debe pertenecer al período de la URL (evita tocar un rol ajeno cambiando el id). */
+    private RolPago obtenerDelPeriodo(YearMonth ym, Long id) {
         RolPago rol = rolPagoRepository.findById(id)
                 .orElseThrow(() -> new RecursoNoEncontradoException("El rol de pago no existe"));
-        Periodo periodo = rol.getPeriodo();
-        if (!periodo.getFechaPeriodo().equals(ym.atDay(1))) {
+        if (!rol.getPeriodo().getFechaPeriodo().equals(ym.atDay(1))) {
             throw new RecursoNoEncontradoException("El rol de pago no pertenece a ese período");
         }
-        if (periodo.getEstadoPeriodo() == EstadoPeriodo.PUBLICADO) {
-            throw new ConflictoException("El período ya fue publicado: sus roles no se modifican");
-        }
         return rol;
+    }
+
+    /** Con el período publicado cambiar un rol es una corrección: pide y valida el motivo. Antes de publicar devuelve null. */
+    private static String motivoSiEstaPublicado(RolPago rol, String motivo) {
+        return rol.getPeriodo().getEstadoPeriodo() == EstadoPeriodo.PUBLICADO ? MotivoCorreccion.validar(motivo) : null;
     }
 
     private RolPagoResumenDto resumen(RolPago rol) {

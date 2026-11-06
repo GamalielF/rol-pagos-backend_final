@@ -1,7 +1,6 @@
 package ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.service;
 
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.entity.EstadoRegistro;
-import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.ConflictoException;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.ServicioExternoException;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.SolicitudInvalidaException;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.EstadoPeriodo;
@@ -9,6 +8,7 @@ import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.Periodo;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.periodo.PeriodoRepository;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.util.CedulaValidator;
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.entity.DirectorioAd;
+import ec.fin.coopsanjose.rol_pagos_backend_final.notificacion.service.NotificacionService;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.config.RolPagoProperties;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.EstadoCarga;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.ResultadoArchivoDto;
@@ -54,6 +54,7 @@ public class CargaRolesPagoService {
     private final RolPagoProperties propiedades;
     private final TransactionTemplate transaccion;
     private final AuditoriaAccionesService auditoria;
+    private final NotificacionService notificaciones;
 
     public CargaRolesPagoService(RolPagoRepository rolPagoRepository,
                                  PeriodoRepository periodoRepository,
@@ -62,7 +63,8 @@ public class CargaRolesPagoService {
                                  AlmacenRolesPago almacen,
                                  RolPagoProperties propiedades,
                                  PlatformTransactionManager transactionManager,
-                                 AuditoriaAccionesService auditoria) {
+                                 AuditoriaAccionesService auditoria,
+                                 NotificacionService notificaciones) {
         this.rolPagoRepository = rolPagoRepository;
         this.periodoRepository = periodoRepository;
         this.resolutor = resolutor;
@@ -71,40 +73,58 @@ public class CargaRolesPagoService {
         this.propiedades = propiedades;
         this.transaccion = new TransactionTemplate(transactionManager);
         this.auditoria = auditoria;
+        this.notificaciones = notificaciones;
     }
 
+    /** La carga de siempre. En un período ya PUBLICADO exige el motivo, así que por esta vía se rechaza (ver el otro método). */
     public ResultadoCargaDto cargar(YearMonth ym, List<MultipartFile> archivos) {
+        return cargar(ym, archivos, false, null);
+    }
+
+    /**
+     * Carga los PDF de un período. Si el período ya está PUBLICADO es una CORRECCIÓN: exige el motivo, reemplaza los roles que
+     * cambiaron, agrega los nuevos y devuelve a la cola el aviso de cada persona afectada. Con {@code simular} no guarda nada:
+     * solo informa qué pasaría con cada archivo, para que RRHH lo confirme antes de reemplazar.
+     */
+    public ResultadoCargaDto cargar(YearMonth ym, List<MultipartFile> archivos, boolean simular, String motivo) {
         if (archivos == null || archivos.isEmpty()) {
             throw new SolicitudInvalidaException("Debe adjuntar al menos un archivo");
         }
         if (archivos.size() > propiedades.maxArchivosPorCarga()) {
             throw new SolicitudInvalidaException("Máximo " + propiedades.maxArchivosPorCarga() + " archivos por carga");
         }
-        Periodo periodo = obtenerOCrearPeriodo(ym);
-        if (periodo.getEstadoPeriodo() == EstadoPeriodo.PUBLICADO) {
-            throw new ConflictoException("El período " + ym + " ya fue publicado y no admite nuevas cargas");
-        }
+        Periodo periodo = simular ? periodoRepository.findByFechaPeriodo(ym.atDay(1)).orElse(null) : obtenerOCrearPeriodo(ym);
+        boolean corrigiendo = periodo != null && periodo.getEstadoPeriodo() == EstadoPeriodo.PUBLICADO;
+        String motivoLimpio = corrigiendo && !simular ? MotivoCorreccion.validar(motivo) : null;
+        Long idPeriodo = periodo == null ? null : periodo.getId();
 
         List<ResultadoArchivoDto> resultados = new ArrayList<>();
         for (MultipartFile archivo : archivos) {
-            resultados.add(procesar(ym, periodo.getId(), archivo));
+            resultados.add(procesar(ym, idPeriodo, archivo, simular, corrigiendo));
         }
         int cargados = contar(resultados, EstadoCarga.CARGADO);
         int reemplazados = contar(resultados, EstadoCarga.REEMPLAZADO);
         int sinCambios = contar(resultados, EstadoCarga.SIN_CAMBIOS);
         int rechazados = contar(resultados, EstadoCarga.RECHAZADO);
-        log.info("Carga del período {}: {} cargados, {} reemplazados, {} sin cambios, {} rechazados",
-                ym, cargados, reemplazados, sinCambios, rechazados);
-        auditoria.registrar(TipoAccion.CARGA_LOTE, ym.toString(), null,
-                "archivos=" + resultados.size() + ", cargados=" + cargados + ", reemplazados=" + reemplazados
-                        + ", sinCambios=" + sinCambios + ", rechazados=" + rechazados);
+        if (!simular) {
+            log.info("{} del período {}: {} cargados, {} reemplazados, {} sin cambios, {} rechazados",
+                    corrigiendo ? "Corrección" : "Carga", ym, cargados, reemplazados, sinCambios, rechazados);
+            String conteos = "archivos=" + resultados.size() + ", cargados=" + cargados + ", reemplazados=" + reemplazados
+                    + ", sinCambios=" + sinCambios + ", rechazados=" + rechazados;
+            if (corrigiendo) {
+                auditoria.registrar(TipoAccion.CARGA_CORRECCION, ym.toString(), null, "motivo=" + motivoLimpio + ", " + conteos);
+            } else {
+                auditoria.registrar(TipoAccion.CARGA_LOTE, ym.toString(), null, conteos);
+            }
+        }
         return new ResultadoCargaDto(ym.toString(), resultados.size(), cargados, reemplazados, sinCambios,
-                rechazados, resultados);
+                rechazados, simular, resultados);
     }
 
     // ------------------------------------------------------------ un archivo
 
-    private ResultadoArchivoDto procesar(YearMonth ym, Long idPeriodo, MultipartFile archivo) {
+    private ResultadoArchivoDto procesar(YearMonth ym, Long idPeriodo, MultipartFile archivo, boolean simular,
+                                         boolean corrigiendo) {
         String nombre = limpiarNombre(archivo.getOriginalFilename());
         try {
             Matcher m = NOMBRE_ARCHIVO.matcher(nombre);
@@ -151,15 +171,21 @@ public class CargaRolesPagoService {
                         ? "El titular está inactivo en el AD"
                         : "No existe un usuario con esa cédula en el AD");
             }
-            boolean nombreCoincide = activos.stream().anyMatch(d -> lector.contieneNombre(datos, d.getNombreCompleto()));
-            if (!nombreCoincide) {
+            Optional<DirectorioAd> titular = activos.stream()
+                    .filter(d -> lector.contieneNombre(datos, d.getNombreCompleto())).findFirst();
+            if (titular.isEmpty()) {
                 return rechazo(nombre, "El nombre dentro del PDF no coincide con el del titular en el AD");
             }
+            String nombreTitular = titular.get().getNombreCompleto();
 
             String hash = sha256(pdf);
+            if (simular) {
+                EstadoCarga previsto = clasificar(idPeriodo, cedula, hash);
+                return new ResultadoArchivoDto(nombre, previsto, mensajeDe(previsto, true), nombreTitular);
+            }
             EstadoCarga estado = Objects.requireNonNull(
-                    transaccion.execute(tx -> guardar(ym, idPeriodo, cedula, pdf, hash)));
-            return new ResultadoArchivoDto(nombre, estado, mensajeDe(estado));
+                    transaccion.execute(tx -> guardar(ym, idPeriodo, cedula, pdf, hash, corrigiendo, activos)));
+            return new ResultadoArchivoDto(nombre, estado, mensajeDe(estado, false), nombreTitular);
 
         } catch (ServicioExternoException e) {
             return rechazo(nombre, e.getMessage());
@@ -171,8 +197,27 @@ public class CargaRolesPagoService {
         }
     }
 
-    /** Crea, reemplaza o deja igual. Un reemplazo escribe un archivo NUEVO: el anterior se conserva en disco. */
-    private EstadoCarga guardar(YearMonth ym, Long idPeriodo, String cedula, byte[] pdf, String hash) {
+    /** Lo que pasaría con ese rol si se guardara, sin tocar nada. Debe coincidir siempre con lo que hace guardar(). */
+    private EstadoCarga clasificar(Long idPeriodo, String cedula, String hash) {
+        if (idPeriodo == null) {
+            return EstadoCarga.CARGADO;
+        }
+        Optional<RolPago> existente = rolPagoRepository.findByPeriodo_IdAndCedula(idPeriodo, cedula);
+        if (existente.isEmpty()) {
+            return EstadoCarga.CARGADO;
+        }
+        RolPago rol = existente.get();
+        boolean estabaInactivo = rol.getEstadoRegistro() == EstadoRegistro.INACTIVO;
+        return !estabaInactivo && hash.equals(rol.getHashSha256()) ? EstadoCarga.SIN_CAMBIOS : EstadoCarga.REEMPLAZADO;
+    }
+
+    /**
+     * Crea, reemplaza o deja igual. Un reemplazo escribe un archivo NUEVO: el anterior se conserva en disco.
+     * Si el período ya está publicado ({@code corrigiendo}), además deja su rastro de auditoría y devuelve el aviso a la cola.
+     */
+    private EstadoCarga guardar(YearMonth ym, Long idPeriodo, String cedula, byte[] pdf, String hash,
+                                boolean corrigiendo, List<DirectorioAd> cuentasActivas) {
+        Periodo periodo = periodoRepository.findById(idPeriodo).orElseThrow();
         Optional<RolPago> existente = rolPagoRepository.findByPeriodo_IdAndCedula(idPeriodo, cedula);
         if (existente.isPresent()) {
             RolPago rol = existente.get();
@@ -187,23 +232,32 @@ public class CargaRolesPagoService {
             rol.setMesPdf(ym.atDay(1));
             rol.activar();
             RolPago guardado = rolPagoRepository.save(rol);
+            String sufijo = corrigiendo ? "; corrección de un período publicado, aviso devuelto a la cola" : "";
             if (estabaInactivo && hash.equals(hashAnterior)) {
                 auditoria.registrar(TipoAccion.ROL_ACTIVADO, ym.toString(), guardado.getId(),
-                        "Reactivado al volver a cargar el mismo archivo");
+                        "Reactivado al volver a cargar el mismo archivo" + sufijo);
             } else {
                 auditoria.registrar(TipoAccion.ROL_REEMPLAZADO, ym.toString(), guardado.getId(),
-                        "Contenido reemplazado (huella " + corta(hashAnterior) + " -> " + corta(hash) + ")");
+                        "Contenido reemplazado (huella " + corta(hashAnterior) + " -> " + corta(hash) + ")" + sufijo);
+            }
+            if (corrigiendo) {
+                notificaciones.reencolarPorCorreccion(periodo, guardado, cuentasActivas);
             }
             return EstadoCarga.REEMPLAZADO;
         }
         RolPago nuevo = new RolPago();
-        nuevo.setPeriodo(periodoRepository.findById(idPeriodo).orElseThrow());
+        nuevo.setPeriodo(periodo);
         nuevo.setCedula(cedula);
         nuevo.setRutaArchivo(almacen.guardar(ym, pdf));
         nuevo.setHashSha256(hash);
         nuevo.setTamanoBytes(pdf.length);
         nuevo.setMesPdf(ym.atDay(1));
-        rolPagoRepository.save(nuevo);
+        RolPago guardado = rolPagoRepository.save(nuevo);
+        if (corrigiendo) {
+            auditoria.registrar(TipoAccion.ROL_AGREGADO, ym.toString(), guardado.getId(),
+                    "Rol agregado después de publicar el período; aviso devuelto a la cola");
+            notificaciones.reencolarPorCorreccion(periodo, guardado, cuentasActivas);
+        }
         return EstadoCarga.CARGADO;
     }
 
@@ -238,7 +292,15 @@ public class CargaRolesPagoService {
         return new ResultadoArchivoDto(archivo, EstadoCarga.RECHAZADO, motivo);
     }
 
-    private static String mensajeDe(EstadoCarga estado) {
+    private static String mensajeDe(EstadoCarga estado, boolean simulacion) {
+        if (simulacion) {
+            return switch (estado) {
+                case CARGADO -> "Es un rol nuevo: se agregará";
+                case REEMPLAZADO -> "Ya existe un rol de esta persona: se va a reemplazar";
+                case SIN_CAMBIOS -> "Es idéntico al que ya está: no cambia";
+                case RECHAZADO -> "Rechazado";
+            };
+        }
         return switch (estado) {
             case CARGADO -> "Cargado correctamente";
             case REEMPLAZADO -> "Reemplazado: el contenido cambió";

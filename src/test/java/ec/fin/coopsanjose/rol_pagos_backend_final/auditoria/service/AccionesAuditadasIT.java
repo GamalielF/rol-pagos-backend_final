@@ -3,7 +3,7 @@ package ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.service;
 import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.entity.AccionRolPago;
 import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.entity.TipoAccion;
 import ec.fin.coopsanjose.rol_pagos_backend_final.auditoria.repository.AccionRolPagoRepository;
-import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.ConflictoException;
+import ec.fin.coopsanjose.rol_pagos_backend_final.common.exception.SolicitudInvalidaException;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.seguridad.Rol;
 import ec.fin.coopsanjose.rol_pagos_backend_final.common.seguridad.UsuarioAutenticado;
 import ec.fin.coopsanjose.rol_pagos_backend_final.directorio.client.DirectorioAdClient;
@@ -175,7 +175,7 @@ class AccionesAuditadasIT extends SoporteRolesPago {
         Long id = rolDe(CEDULA_JUAN).getId();
         publicacion.publicar(PERIODO, false, "zz.rrhh");
 
-        assertThatThrownBy(() -> gestion.inactivar(PERIODO, id)).isInstanceOf(ConflictoException.class);
+        assertThatThrownBy(() -> gestion.inactivar(PERIODO, id)).isInstanceOf(SolicitudInvalidaException.class);
 
         assertThat(acciones()).extracting(AccionRolPago::getTipoAccion).doesNotContain(TipoAccion.ROL_INACTIVADO);
     }
