@@ -77,6 +77,15 @@ public class LectorPdfRolPago {
         return true;
     }
 
+    /**
+     * Como {@link #contieneNombre}, pero además tolera UNA errata de digitación en una palabra larga y dice cuál fue
+     * (ver {@link CoincidenciaNombre}). Todo lo que {@code contieneNombre} acepta, esto también.
+     */
+    public CoincidenciaNombre.Resultado coincidencia(DatosPdf datos, String nombre) {
+        String normalizado = normalizarTexto(nombre);
+        return normalizado.isEmpty() ? CoincidenciaNombre.Resultado.NO : CoincidenciaNombre.evaluar(datos.texto(), normalizado);
+    }
+
     private Optional<YearMonth> buscarPeriodo(String texto) {
         Matcher m = MES_ANIO.matcher(texto);
         if (!m.find()) {

@@ -14,6 +14,7 @@ import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.EstadoCar
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.ResultadoArchivoDto;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.dto.response.ResultadoCargaDto;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.entity.RolPago;
+import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.pdf.CoincidenciaNombre;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.pdf.LectorPdfRolPago;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.repository.RolPagoRepository;
 import ec.fin.coopsanjose.rol_pagos_backend_final.rolpago.storage.AlmacenRolesPago;
@@ -171,21 +172,33 @@ public class CargaRolesPagoService {
                         ? "El titular está inactivo en el AD"
                         : "No existe un usuario con esa cédula en el AD");
             }
-            Optional<DirectorioAd> titular = activos.stream()
-                    .filter(d -> lector.contieneNombre(datos, d.getNombreCompleto())).findFirst();
-            if (titular.isEmpty()) {
-                return rechazo(nombre, "El nombre dentro del PDF no coincide con el del titular en el AD");
+            DirectorioAd titular = null;
+            CoincidenciaNombre.Resultado coincidencia = CoincidenciaNombre.Resultado.NO;
+            List<String> faltantes = List.of();
+            for (DirectorioAd d : activos) {
+                CoincidenciaNombre.Resultado candidata = lector.coincidencia(datos, d.getNombreCompleto());
+                if (candidata.coincide() && (titular == null || (candidata.exacta() && !coincidencia.exacta()))) {
+                    titular = d;
+                    coincidencia = candidata;
+                } else if (!candidata.coincide() && !candidata.noEncontradas().isEmpty()
+                        && (faltantes.isEmpty() || candidata.noEncontradas().size() < faltantes.size())) {
+                    faltantes = candidata.noEncontradas();
+                }
             }
-            String nombreTitular = titular.get().getNombreCompleto();
+            if (titular == null) {
+                return rechazo(nombre, "El nombre dentro del PDF no coincide con el del titular en el AD" + pistaDeNombre(faltantes));
+            }
+            String nombreTitular = titular.getNombreCompleto();
+            String avisoDeErrata = avisoDeErrata(coincidencia);
 
             String hash = sha256(pdf);
             if (simular) {
                 EstadoCarga previsto = clasificar(idPeriodo, cedula, hash);
-                return new ResultadoArchivoDto(nombre, previsto, mensajeDe(previsto, true), nombreTitular);
+                return new ResultadoArchivoDto(nombre, previsto, mensajeDe(previsto, true) + avisoDeErrata, nombreTitular);
             }
             EstadoCarga estado = Objects.requireNonNull(
                     transaccion.execute(tx -> guardar(ym, idPeriodo, cedula, pdf, hash, corrigiendo, activos)));
-            return new ResultadoArchivoDto(nombre, estado, mensajeDe(estado, false), nombreTitular);
+            return new ResultadoArchivoDto(nombre, estado, mensajeDe(estado, false) + avisoDeErrata, nombreTitular);
 
         } catch (ServicioExternoException e) {
             return rechazo(nombre, e.getMessage());
@@ -290,6 +303,20 @@ public class CargaRolesPagoService {
 
     private static ResultadoArchivoDto rechazo(String archivo, String motivo) {
         return new ResultadoArchivoDto(archivo, EstadoCarga.RECHAZADO, motivo);
+    }
+
+    /** Si el nombre se aceptó con una errata, RRHH debe poder verla en el resultado: el PDF que recibirá la persona la lleva. */
+    private static String avisoDeErrata(CoincidenciaNombre.Resultado coincidencia) {
+        if (coincidencia.diferencias().isEmpty()) {
+            return "";
+        }
+        CoincidenciaNombre.Diferencia diferencia = coincidencia.diferencias().get(0);
+        return ". Revise la ortografía del PDF: dice «" + diferencia.enElPdf() + "» y el AD «" + diferencia.enElAd() + "»";
+    }
+
+    /** Qué palabras del nombre del AD no aparecen en el PDF: así se ve la errata sin abrir el archivo. */
+    private static String pistaDeNombre(List<String> faltantes) {
+        return faltantes.isEmpty() ? "" : " (en el PDF no aparece: " + String.join(", ", faltantes) + ")";
     }
 
     private static String mensajeDe(EstadoCarga estado, boolean simulacion) {
