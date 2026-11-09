@@ -28,7 +28,7 @@ spring:
       app-role:
         role-id: ${VAULT_ROLE_ID}
         secret-id: ${VAULT_SECRET_ID}
-      fail-fast: true
+     # fail-fast: true
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: ${db_url}                     # jdbc:mysql://test-<servicio>-db:3306/test_<servicio>_db?useUnicode=true&useSSL=false&serverTimezone=America/Guayaquil&allowPublicKeyRetrieval=true
