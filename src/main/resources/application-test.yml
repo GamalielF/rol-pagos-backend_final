@@ -1,0 +1,83 @@
+# =====================================================================================================
+# SERVIDOR DE PRUEBAS (pre-producción).   Se activa con SPRING_PROFILES_ACTIVE=test  (lo fija el flujo de GitHub).
+#
+# Sigue la plantilla de TI ("spring edition"): la aplicación lee sus secretos del Vault INSTITUCIONAL por sí misma, con AppRole.
+# El flujo solo le entrega VAULT_URI, VAULT_ROLE_ID, VAULT_SECRET_ID y SPRING_APPLICATION_NAME (= el nombre del servicio).
+# Lee de:   secret/coacsanjose/<SPRING_APPLICATION_NAME>        y        secret/coacsanjose/<SPRING_APPLICATION_NAME>/test
+#
+# Por qué el bloque de Vault está aquí y no en application.yaml (como en la plantilla de TI): en tu equipo (perfil dev) el Vault es
+# local y se configura en application-dev.yml; ponerlo en el base lo mezclaría con el de desarrollo. Los NOMBRES de las variables
+# (VAULT_URI, VAULT_ROLE_ID, VAULT_SECRET_ID) y el contexto (coacsanjose/${spring.application.name}) son los mismos de la plantilla.
+#
+# Lo que no tiene valor por defecto es OBLIGATORIO: si falta en el Vault, la aplicación no arranca (a propósito).
+# NUNCA se combina con "dev".
+# =====================================================================================================
+spring:
+  config:
+    import:
+      - "vault://"
+  cloud:
+    vault:
+      enabled: true
+      uri: ${VAULT_URI}
+      kv:
+        enabled: true
+        backend: secret
+        default-context: coacsanjose/${spring.application.name}
+      authentication: APPROLE
+      app-role:
+        role-id: ${VAULT_ROLE_ID}
+        secret-id: ${VAULT_SECRET_ID}
+     # fail-fast: true
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${db_url}                     # jdbc:mysql://test-<servicio>-db:3306/test_<servicio>_db?useUnicode=true&useSSL=false&serverTimezone=America/Guayaquil&allowPublicKeyRetrieval=true
+    username: ${db_username}           # necesita permisos de DDL sobre su base: Flyway crea y modifica las tablas
+    password: ${db_password}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+  jpa:
+    show-sql: false
+  ssl:
+    bundle:
+      pem:
+        ad:
+          truststore:
+            certificate: file:${ad_ca_file:/app/certs/ca-ad.crt}   # intermedio RapidSSL/DigiCert del AD y de la correo; vence 2/11/2027 (va dentro de la imagen)
+server:
+  forward-headers-strategy: native     # SOLO detrás de un proxy de confianza (Traefik): da la IP real al límite de intentos
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+app:
+  seguridad:
+    dev-auth-habilitado: false         # explícito: aquí nunca se suplanta a nadie
+  ad:
+    url-base: ${ad_url_base}
+    token: ${ad_token:}
+    ssl-bundle: ad
+  jwt:
+    clave-publica: ${jwt_public_key}   # texto PEM de la clave pública del autenticador que firma los tokens de ESTE entorno
+  roles:
+    ruta-base: ${roles_ruta_base:/datos/roles-pago}   # volumen persistente: dentro del contenedor se perdería al redesplegar
+  cors:
+    origenes-permitidos: ${cors_allowed_origins}      # URL EXACTA del front (https, sin barra final y SIN comodines); varias separadas por coma
+    cabeceras-permitidas:
+      - Authorization
+      - Content-Type
+  correo:
+    modo: API
+    api:
+      url: ${correo_api_url}
+      token: ${correo_api_token:}
+      ssl-bundle: ad
+      codigo-plantilla: ${correo_codigo_plantilla:ACCOUNT_ACTIVATE}
+      redirigir-a: ${correo_redirigir_a}   # OBLIGATORIO. Sin valor la aplicación NO arranca: así nunca se escribe a empleados reales
+    individual:
+      url: ${correo_api_url_individual:}
+  notificaciones:
+    habilitada: true
+    url-sistema: ${front_url}

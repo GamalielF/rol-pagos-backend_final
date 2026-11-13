@@ -1,0 +1,133 @@
+name: Deploy Test
+
+# Basado en la plantilla de TI "spring edition". Diferencias con la plantilla (todas necesarias para ESTA aplicación):
+#   1. workflow_dispatch: se puede lanzar a mano desde la pestaña Actions.
+#   2. Un volumen con nombre para los PDF de los roles (sin él se pierden en cada despliegue).
+#   3. El contenedor se une a la red de SU base de datos (test-<servicio>-net) ANTES de arrancar.
+#   4. Se indica el puerto 8080 a Traefik y se muestran los últimos registros del arranque.
+on:
+  push:
+    branches:
+      - develop
+    paths-ignore:
+      - 'README.md'
+      - '.gitignore'
+      - 'docs/**'
+  workflow_dispatch:
+
+jobs:
+  test-deploy:
+    name: Deploy Test Spring Boot Service
+    runs-on: [self-hosted, Rocky]
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure container variables
+        run: |
+          SERVICE_NAME="${{ secrets.SERVICE_NAME }}"
+          echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
+          echo "CONTAINER_NAME=test-$SERVICE_NAME-app" >> $GITHUB_ENV
+          echo "IMAGE_NAME=app/$SERVICE_NAME:test" >> $GITHUB_ENV
+          echo "DB_NETWORK=test-$SERVICE_NAME-net" >> $GITHUB_ENV
+          echo "DATA_VOLUME=test-$SERVICE_NAME-roles" >> $GITHUB_ENV
+
+      - name: Retrieve Traefik Config
+        uses: hashicorp/vault-action@v3
+        with:
+          url: ${{ secrets.VAULT_URI_TEST }}
+          role: ${{ secrets.VAULT_GITHUB_ROLE }}
+          method: jwt
+          jwtGithubAudience: ${{ secrets.VAULT_GITHUB_AUDIENCE }}
+          tlsSkipVerify: true
+          secrets: |
+            secret/data/coacsanjose/${{ secrets.SERVICE_NAME }}/config host_test | VAULT_HOST ;
+            secret/data/coacsanjose/${{ secrets.SERVICE_NAME }}/config path_test | VAULT_PATH
+
+      - name: Build Spring Boot Docker Image
+        run: |
+          docker build -t "${{ env.IMAGE_NAME }}" .
+
+      # Antes de reemplazar el contenedor, su registro se guarda como archivo descargable de esta ejecución
+      # (pestaña Summary → Artifacts). Sin esto, cada despliegue borraba la evidencia de lo que había pasado.
+      - name: Save Previous Container Log
+        run: |
+          if docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+            {
+              echo "== Contenedor anterior: $CONTAINER_NAME (guardado el $(date '+%Y-%m-%d %H:%M:%S'))"
+              docker inspect "$CONTAINER_NAME" --format 'estado={{.State.Status}} codigo_salida={{.State.ExitCode}} inicio={{.State.StartedAt}} fin={{.State.FinishedAt}} reinicios={{.RestartCount}}'
+              echo "== Últimas 5000 líneas de su registro"
+              docker logs --tail 5000 "$CONTAINER_NAME" 2>&1
+            } > registro-contenedor-anterior.log
+          else
+            echo "No había un contenedor anterior." > registro-contenedor-anterior.log
+          fi
+
+      - name: Upload Previous Container Log
+        uses: actions/upload-artifact@v4
+        with:
+          name: registro-contenedor-anterior
+          path: registro-contenedor-anterior.log
+          retention-days: 30
+
+      # El contenedor queda en DOS redes (la de Traefik y la de su base). Sin traefik.docker.network, Traefik elige una al azar
+      # y, si elige la de la base (a la que no tiene acceso), responde 504 Gateway Timeout.
+      - name: Deploy Test Container
+        run: |
+          docker stop "${{ env.CONTAINER_NAME }}" || true
+          docker rm "${{ env.CONTAINER_NAME }}" || true
+
+          docker create \
+            --name "${{ env.CONTAINER_NAME }}" \
+            --restart always \
+            --network proxy-network \
+            -v "${{ env.DATA_VOLUME }}:/datos/roles-pago" \
+            -e SPRING_APPLICATION_NAME="${{ env.SERVICE_NAME }}" \
+            -e SPRING_PROFILES_ACTIVE=test \
+            -e VAULT_URI="${{ secrets.VAULT_SPRING_URI_TEST }}" \
+            -e VAULT_ROLE_ID="${{ secrets.VAULT_ROLE_ID_TEST }}" \
+            -e VAULT_SECRET_ID="${{ secrets.VAULT_SECRET_ID_TEST }}" \
+            -e SERVER_SERVLET_CONTEXT_PATH="${{ env.VAULT_PATH }}" \
+            --label "traefik.enable=true" \
+            --label "traefik.docker.network=proxy-network" \
+            --label "traefik.http.routers.${{ env.CONTAINER_NAME }}.rule=Host(\"${{ env.VAULT_HOST }}\") && PathPrefix(\"${{ env.VAULT_PATH }}\")" \
+            --label "traefik.http.routers.${{ env.CONTAINER_NAME }}.entrypoints=websecure" \
+            --label "traefik.http.routers.${{ env.CONTAINER_NAME }}.tls=true" \
+            --label "traefik.http.services.${{ env.CONTAINER_NAME }}.loadbalancer.server.port=8080" \
+            "${{ env.IMAGE_NAME }}"
+
+          # Las redes se unen ANTES de arrancar: la aplicación necesita la base de datos desde su primer segundo (Flyway).
+          docker network connect "${{ env.DB_NETWORK }}" "${{ env.CONTAINER_NAME }}"
+          docker start "${{ env.CONTAINER_NAME }}"
+
+      # El despliegue solo queda en verde si la aplicación ARRANCÓ. Si no (por ejemplo, Vault sellado), se pone en rojo con el motivo.
+      - name: Verify Application Started
+        run: |
+          for intento in $(seq 1 36); do
+            if docker logs "$CONTAINER_NAME" 2>&1 | grep -q "Started RolPagosBackendFinalApplication"; then
+              echo "La aplicación arrancó correctamente."; exit 0
+            fi
+            if docker logs "$CONTAINER_NAME" 2>&1 | grep -q "Vault is sealed"; then
+              echo "::error::Vault está SELLADO: la aplicación no puede leer sus claves. Pida a TI que lo abran (unseal) y vuelva a desplegar."; exit 1
+            fi
+            if docker logs "$CONTAINER_NAME" 2>&1 | grep -q "APPLICATION FAILED TO START"; then break; fi
+            sleep 5
+          done
+          echo "::error::La aplicación no arrancó. Últimas líneas de su registro:"
+          docker logs --tail 60 "$CONTAINER_NAME" 2>&1
+          exit 1
+
+      - name: Info
+        run: |
+          echo "========================================================================="
+          echo "Container: ${{ env.CONTAINER_NAME }}"
+          echo "========================================================================="
+          sleep 45
+          docker logs --tail 25 "${{ env.CONTAINER_NAME }}" || true
+
+      - name: Clean up unused Docker images
+        run: docker image prune -f

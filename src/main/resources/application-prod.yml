@@ -1,54 +1,80 @@
-# ============================================================================
-# PRODUCCION (PLANTILLA: nada está activo; TI define los valores reales)
+# =====================================================================================================
+# PRODUCCIÓN.   Se activa con SPRING_PROFILES_ACTIVE=prod  (la imagen ya lo trae por defecto y el flujo de producción lo fija).
+# BORRADOR: no se ha probado en un servidor. NO active el despliegue a producción hasta que TI confirme el Vault y la base.
 #
-# Antes de activar: (1) el autenticador debe corregir /auth/refresh y agregar un logout,
-# (2) debe existir un par de claves de firma PROPIO de producción (distinto al de desarrollo),
-# (3) la API de correo debe ser la definitiva.
-#
-# Los secretos NUNCA van aquí: se siembran en el Vault de producción.
-#   vault kv put secret/rol-pagos-backend/db   db.username=... db.password=...
-#   vault kv put secret/rol-pagos-backend/ad   ad.url-base=https://...  ad.token='...'
-#   vault kv put secret/rol-pagos-backend/jwt  jwt.public-key=@clave-publica-produccion.pem
-#   vault kv put secret/rol-pagos-backend/correo correo.api.url=https://...  correo.api.token='...'
-#
-# server:
-#   forward-headers-strategy: native     # SOLO detrás de un proxy de confianza (Traefik/Nginx): da la IP real del cliente
-# spring:
-#   config:
-#     import:
-#       - vault://secret/rol-pagos-backend/db
-#       - vault://secret/rol-pagos-backend/ad
-#       - vault://secret/rol-pagos-backend/jwt
-#       - vault://secret/rol-pagos-backend/correo
-#   datasource:
-#     driver-class-name: com.mysql.cj.jdbc.Driver
-#     url: jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}?useUnicode=true&serverTimezone=America/Guayaquil
-#     username: ${db.username}
-#     password: ${db.password}
-#   cloud:
-#     vault:
-#       enabled: true
-#       uri: https://VAULT-DE-PRODUCCION        # lo define TI
-#       authentication: APPROLE                 # o el método que indique TI
-#       kv:
-#         enabled: true
-#         backend: secret                       # nombre del motor de secretos que indique TI
-#       fail-fast: true
-# app:
-#   cors:
-#     origenes-permitidos:
-#       - https://URL-DEL-FRONTEND              # dominio real, con https y sin barra final
-#     cabeceras-permitidas:
-#       - Authorization
-#       - Content-Type
-#   roles:
-#     ruta-base: /datos/roles-pago              # disco persistente y con respaldo
-#   notificaciones:
-#     habilitada: false                         # se enciende cuando exista la API de correo definitiva
-#     url-sistema: https://URL-DEL-FRONTEND
-#   correo:
-#     modo: API
-#     api:
-#       codigo-plantilla: ROL_PAGO_DISPONIBLE   # si la API lo exige; lo define el dueño de la API
-#       redirigir-a: ""                          # DEBE quedar vacío en producción
-# ============================================================================
+# Es igual que application-test.yml con CUATRO diferencias deliberadas:
+#   1. NO hay redirección de correo: los avisos salen a las personas reales.
+#   2. Los avisos están APAGADOS por defecto: se encienden con la clave notificaciones_habilitada=true en el Vault, cuando TI lo apruebe.
+#   3. Pool de conexiones más grande (como en la plantilla de TI).
+#   4. Con el perfil "prod" la aplicación se NIEGA a arrancar si alguien habilita la identificación de desarrollo (X-Dev-Usuario).
+# Lee de:   secret/coacsanjose/<SPRING_APPLICATION_NAME>        y        secret/coacsanjose/<SPRING_APPLICATION_NAME>/prod
+# =====================================================================================================
+spring:
+  config:
+    import:
+      - "vault://"
+  cloud:
+    vault:
+      enabled: true
+      uri: ${VAULT_URI}
+      kv:
+        enabled: true
+        backend: secret
+        default-context: coacsanjose/${spring.application.name}
+      authentication: APPROLE
+      app-role:
+        role-id: ${VAULT_ROLE_ID}
+        secret-id: ${VAULT_SECRET_ID}
+     # fail-fast: true
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${db_url}
+    username: ${db_username}
+    password: ${db_password}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+  jpa:
+    show-sql: false
+  ssl:
+    bundle:
+      pem:
+        ad:
+          truststore:
+            certificate: file:${ad_ca_file:/app/certs/ca-ad.crt}
+server:
+  forward-headers-strategy: native
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+app:
+  seguridad:
+    dev-auth-habilitado: false
+  ad:
+    url-base: ${ad_url_base}
+    token: ${ad_token:}
+    ssl-bundle: ad
+  jwt:
+    clave-publica: ${jwt_public_key}   # la clave pública del autenticador de PRODUCCIÓN (distinta de la de desarrollo y pre-producción)
+  roles:
+    ruta-base: ${roles_ruta_base:/datos/roles-pago}
+  cors:
+    origenes-permitidos: ${cors_allowed_origins}
+    cabeceras-permitidas:
+      - Authorization
+      - Content-Type
+  correo:
+    modo: API
+    api:
+      url: ${correo_api_url}
+      token: ${correo_api_token:}
+      ssl-bundle: ad
+      codigo-plantilla: ${correo_codigo_plantilla:ACCOUNT_ACTIVATE}
+      # SIN redirigir-a: en producción cada aviso va a su destinatario real
+    individual:
+      url: ${correo_api_url_individual:}
+  notificaciones:
+    habilitada: ${notificaciones_habilitada:false}
+    url-sistema: ${front_url}
